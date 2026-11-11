@@ -203,8 +203,18 @@ git checkout feature/ticket-creation
    ![Φόρμα New pull request](images/05-new-pull-request.png)
 
    Αν τα δύο branches είναι ίδια, εμφανίζεται το μήνυμα «These branches are equal. There is no need to create a pull request». Χρειάζεται τουλάχιστον ένα commit στο feature branch.
-5. Συμπλήρωσε **τίτλο** και **περιγραφή** (τι αλλάζει, γιατί, πώς δοκιμάστηκε). Αν υπάρχει σχετικό issue, γράψε `Closes #12`.
-6. Πρόσθεσε reviewer, και πάτησε **Create Pull Request**.
+5. Συμπλήρωσε **τίτλο** (σε μορφή `<type>(<scope>): <subject>`) και **περιγραφή** (τι αλλάζει, γιατί, πώς δοκιμάστηκε). Αν υπάρχει σχετικό issue, γράψε `Closes #12`.
+
+   ![Τίτλος και περιγραφή του PR](images/06-pr-title-description.png)
+
+6. Πάτησε **Create pull request**. Μετά, από το πλευρικό πάνελ **Reviewers** πρόσθεσε τον reviewer.
+
+   ![Επιλογή reviewer στο πλευρικό πάνελ](images/07-pr-reviewer.png)
+
+   Το PR εμφανίζεται ως **Open**, με τα commits και τα αρχεία που αλλάζουν.
+
+   ![Ανοιχτό PR](images/08-pr-open.png)
+
 7. Απάντησε στα σχόλια του review αν υπάρχουν. Νέα commits στο ίδιο branch ενημερώνουν αυτόματα το PR.
 8. Μετά την έγκριση, ο **reviewer** κάνει **Merge Squash** (ανάλογα με τη συμφωνία της ομάδας).
 9. Η διαγραφή του feature branch στο **remote** γίνεται **μόνο από τον reviewer** (βλ. παρακάτω). Ο δημιουργός του PR διαγράφει μόνο το **τοπικό** branch:
@@ -224,9 +234,19 @@ git fetch --prune                       # καθαρισμός αναφορών 
 
 1. Άνοιξε το PR στο Codeberg και έλεγξε τις αλλαγές (καρτέλα **Files changed**).
 2. Πάτησε **Approve** αν όλα είναι σωστά.
-3. Στο κάτω μέρος του PR διάλεξε τον τρόπο merge (π.χ. **Squash**).
-4. Τσέκαρε το **Delete branch after merge** και πάτησε **Merge**.
-5. Αν δεν το τσέκαρες, μετά το merge εμφανίζεται κουμπί **Delete Branch** μέσα στο PR.
+3. Στο κάτω μέρος του PR άνοιξε το βελάκι δίπλα στο κουμπί merge και διάλεξε **Create squash commit** (για PR σε `develop`). Για release PR προς `main` διάλεξε **Create merge commit**.
+
+   ![Επιλογές merge](images/09-merge-options.png)
+
+   Αν το PR δεν έχει τις απαιτούμενες εγκρίσεις (π.χ. «0 of 1 approvals granted»), ένας administrator μπορεί παρ' όλα αυτά να κάνει merge. Χρησιμοποίησέ το μόνο με συμφωνία της ομάδας.
+
+4. Έλεγξε τον τίτλο και την περιγραφή του squash commit (ο τίτλος παίρνει αυτόματα το `(#αριθμός)` του PR) και πάτησε **Create squash commit**. Τσέκαρε το **Delete branch "…"** αν θέλεις να διαγραφεί το branch με το merge.
+
+   ![Φόρμα squash commit](images/10-squash-commit-form.png)
+
+5. Αν δεν το τσέκαρες, μετά το merge το PR εμφανίζεται ως **Merged** και υπάρχει κουμπί **Delete branch** μέσα στο PR.
+
+   ![PR μετά το merge, με το κουμπί Delete branch](images/11-pr-merged.png)
 
 Εναλλακτικά, μέσω terminal:
 
