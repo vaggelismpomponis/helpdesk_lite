@@ -39,6 +39,7 @@ git log --oneline --graph --all   # Ιστορικό με γράφημα branche
 git fetch origin            # Κατεβάζει αλλαγές χωρίς να τις συγχωνεύσει
 git pull                    # fetch + merge στο τρέχον branch
 git push                    # Ανεβάζει commits στο remote
+git switch <branch>         # Μετάβαση σε άλλο branch
 ```
 
 ### Αναίρεση αλλαγών
