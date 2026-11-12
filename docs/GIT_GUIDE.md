@@ -39,6 +39,7 @@ git log --oneline --graph --all   # Ιστορικό με γράφημα branche
 git fetch origin            # Κατεβάζει αλλαγές χωρίς να τις συγχωνεύσει
 git pull                    # fetch + merge στο τρέχον branch
 git push                    # Ανεβάζει commits στο remote
+git switch <branch>         # Μετάβαση σε άλλο branch
 ```
 
 ### Αναίρεση αλλαγών
@@ -77,6 +78,15 @@ gitGraph
    checkout main
    merge develop
 ```
+
+Συνοπτικά η ροή είναι:
+
+1. Κόβεις το feature branch από το `develop`.
+2. Ανοίγεις PR `feature/... → develop`.
+3. Ο reviewer κάνει **Merge Squash** στο `develop` (τα commits του feature γίνονται ένα) και διαγράφει το feature branch στο remote.
+4. Όταν το `develop` είναι σταθερό, ανοίγεται release PR `develop → main` με **Merge commit**.
+
+Το `git fetch` δεν συγχωνεύει τίποτα, και το `develop` δεν παίρνει αυτόματα αλλαγές από το `main`. Το `main` αλλάζει μόνο από release PR, οπότε κανονικά δεν έχει commits που λείπουν από το `develop`.
 
 ### Ονοματολογία branches
 
@@ -154,15 +164,15 @@ git rebase origin/develop
 2. Στην καρτέλα **Code** πάτησε το **branches** (π.χ. «2 branches») στη μπάρα πάνω από τα αρχεία.
 3. Στη γραμμή του `develop` πάτησε το εικονίδιο **Create new branch from "develop"** (το πρώτο εικονίδιο από αριστερά στα δεξιά της γραμμής).
 
-   ![Σελίδα Branches με το εικονίδιο δημιουργίας νέου branch από το develop](docs/images/01-branches-page.png)
+   ![Σελίδα Branches με το εικονίδιο δημιουργίας νέου branch από το develop](images/01-branches-page.png)
 
 4. Στο παράθυρο **Create new branch** γράψε το όνομα στο πεδίο **Branch name**, π.χ. `feature/ticket-creation`, και πάτησε **Confirm**.
 
-   ![Παράθυρο Create new branch](docs/images/02-create-branch-dialog.png)
+   ![Παράθυρο Create new branch](images/02-create-branch-dialog.png)
 
 5. Το νέο branch εμφανίζεται στη λίστα και ο μετρητής ενημερώνεται (π.χ. «3 branches»).
 
-   ![Λίστα branches μετά τη δημιουργία](docs/images/03-branches-list-after.png)
+   ![Λίστα branches μετά τη δημιουργία](images/03-branches-list-after.png)
 
 **Μέθοδος Β: από το dropdown των branches**
 
@@ -185,17 +195,27 @@ git checkout feature/ticket-creation
 2. Άνοιξε το repo στο `https://codeberg.org/ebomponis001/HelpDesk_Lite`.
 3. Πήγαινε στην καρτέλα **Pull requests** και πάτησε **New pull request**.
 
-   ![Καρτέλα Pull requests](docs/images/04-pull-requests.png)
+   ![Καρτέλα Pull requests](images/04-pull-requests.png)
 
 4. Επίλεξε:
    - **merge into (προς):** `develop`
    - **pull from (από):** `feature/ticket-creation`
 
-   ![Φόρμα New pull request](docs/images/05-new-pull-request.png)
+   ![Φόρμα New pull request](images/05-new-pull-request.png)
 
    Αν τα δύο branches είναι ίδια, εμφανίζεται το μήνυμα «These branches are equal. There is no need to create a pull request». Χρειάζεται τουλάχιστον ένα commit στο feature branch.
-5. Συμπλήρωσε **τίτλο** και **περιγραφή** (τι αλλάζει, γιατί, πώς δοκιμάστηκε). Αν υπάρχει σχετικό issue, γράψε `Closes #12`.
-6. Πρόσθεσε reviewer, και πάτησε **Create Pull Request**.
+5. Συμπλήρωσε **τίτλο** (σε μορφή `<type>(<scope>): <subject>`) και **περιγραφή** (τι αλλάζει, γιατί, πώς δοκιμάστηκε). Αν υπάρχει σχετικό issue, γράψε `Closes #12`.
+
+   ![Τίτλος και περιγραφή του PR](images/06-pr-title-description.png)
+
+6. Πάτησε **Create pull request**. Μετά, από το πλευρικό πάνελ **Reviewers** πρόσθεσε τον reviewer.
+
+   ![Επιλογή reviewer στο πλευρικό πάνελ](images/07-pr-reviewer.png)
+
+   Το PR εμφανίζεται ως **Open**, με τα commits και τα αρχεία που αλλάζουν.
+
+   ![Ανοιχτό PR](images/08-pr-open.png)
+
 7. Απάντησε στα σχόλια του review αν υπάρχουν. Νέα commits στο ίδιο branch ενημερώνουν αυτόματα το PR.
 8. Μετά την έγκριση, ο **reviewer** κάνει **Merge Squash** (ανάλογα με τη συμφωνία της ομάδας).
 9. Η διαγραφή του feature branch στο **remote** γίνεται **μόνο από τον reviewer** (βλ. παρακάτω). Ο δημιουργός του PR διαγράφει μόνο το **τοπικό** branch:
@@ -207,15 +227,27 @@ git branch -d feature/ticket-creation   # μόνο τοπικά
 git fetch --prune                       # καθαρισμός αναφορών σε remote branches που διαγράφηκαν
 ```
 
+> Μετά από **Squash** το Git δεν αναγνωρίζει το τοπικό feature branch ως merged και το `git branch -d` μπορεί να αρνηθεί. Αφού επιβεβαιώσεις ότι το PR έγινε merge, χρησιμοποίησε `git branch -D feature/ticket-creation`.
+
 > Ο δημιουργός του PR **δεν** τρέχει `git push origin --delete ...`.
 
 ### Για τον reviewer: merge και διαγραφή remote branch
 
 1. Άνοιξε το PR στο Codeberg και έλεγξε τις αλλαγές (καρτέλα **Files changed**).
 2. Πάτησε **Approve** αν όλα είναι σωστά.
-3. Στο κάτω μέρος του PR διάλεξε τον τρόπο merge (π.χ. **Squash**).
-4. Τσέκαρε το **Delete branch after merge** και πάτησε **Merge**.
-5. Αν δεν το τσέκαρες, μετά το merge εμφανίζεται κουμπί **Delete Branch** μέσα στο PR.
+3. Στο κάτω μέρος του PR άνοιξε το βελάκι δίπλα στο κουμπί merge και διάλεξε **Create squash commit** (για PR σε `develop`). Για release PR προς `main` διάλεξε **Create merge commit**.
+
+   ![Επιλογές merge](images/09-merge-options.png)
+
+   Αν το PR δεν έχει τις απαιτούμενες εγκρίσεις (π.χ. «0 of 1 approvals granted»), ένας administrator μπορεί παρ' όλα αυτά να κάνει merge. Χρησιμοποίησέ το μόνο με συμφωνία της ομάδας.
+
+4. Έλεγξε τον τίτλο και την περιγραφή του squash commit (ο τίτλος παίρνει αυτόματα το `(#αριθμός)` του PR) και πάτησε **Create squash commit**. Τσέκαρε το **Delete branch "…"** αν θέλεις να διαγραφεί το branch με το merge.
+
+   ![Φόρμα squash commit](images/10-squash-commit-form.png)
+
+5. Αν δεν το τσέκαρες, μετά το merge το PR εμφανίζεται ως **Merged** και υπάρχει κουμπί **Delete branch** μέσα στο PR.
+
+   ![PR μετά το merge, με το κουμπί Delete branch](images/11-pr-merged.png)
 
 Εναλλακτικά, μέσω terminal:
 
@@ -235,6 +267,17 @@ git push origin --delete feature/ticket-creation
 ### Release: `develop` προς `main`
 
 Όταν το `develop` είναι σταθερό, άνοιξε PR με **base:** `main` και **compare:** `develop`.
+
+Στο release PR χρησιμοποίησε **Merge commit** και όχι Squash. Με Squash το `main` παίρνει ένα νέο commit που δεν υπάρχει στο `develop`, τα δύο branches φαίνονται αποκλίνοντα και το επόμενο release PR μπορεί να δείξει περιττά conflicts.
+
+Αν γίνει αλλαγή απευθείας στο `main` (π.χ. hotfix), φέρε την στο `develop` με PR `main → develop` ή τοπικά:
+
+```powershell
+git fetch origin
+git checkout develop
+git merge origin/main
+git push origin develop
+```
 
 ## 7. Επίλυση conflicts
 
