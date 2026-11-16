@@ -1,0 +1,134 @@
+[
+    {
+      "id": "EVAL-01",
+      "request_text": "I can’t connect to the VPN since yesterday afternoon and I need the finance reports before Friday. Can you reset my access?",
+      "sender_email": "maria.papadopoulou@nimbus.com",
+      "requires_clarification": true,
+      "clarification_answer": "I am working from the Athens office on my MacBook Pro.",
+      "expected_action": "link_to_outage",
+      "requires_approval": false,
+      "expected_citation": {
+        "doc_id": "POL-001",
+        "effective_date": "2026-09-01"
+      },
+      "notes": "Main demo scenario: missing device/office -> asks clarification -> finds open outage on Identity Provider -> links to outage instead of resetting password."
+    },
+    {
+      "id": "EVAL-02",
+      "request_text": "What is the Wi-Fi policy for visitors coming to our London office?",
+      "sender_email": "employee02@nimbus.com",
+      "requires_clarification": false,
+      "expected_action": "answer_from_policy",
+      "requires_approval": false,
+      "expected_citation": {
+        "doc_id": "POL-016",
+        "effective_date": "2026-01-05"
+      },
+      "notes": "Simple informational policy lookup."
+    },
+    {
+      "id": "EVAL-03",
+      "request_text": "How many hours in advance do I need to notify IT before traveling abroad for remote work?",
+      "sender_email": "employee03@nimbus.com",
+      "requires_clarification": false,
+      "expected_action": "answer_from_policy",
+      "requires_approval": false,
+      "expected_citation": {
+        "doc_id": "POL-008",
+        "effective_date": "2026-01-10"
+      },
+      "notes": "Simple informational policy lookup."
+    },
+    {
+      "id": "EVAL-04",
+      "request_text": "Do we still allow immediate password resets without human approval under the password reset policy?",
+      "sender_email": "employee04@nimbus.com",
+      "requires_clarification": false,
+      "expected_action": "answer_from_policy",
+      "requires_approval": false,
+      "expected_citation": {
+        "doc_id": "POL-001",
+        "effective_date": "2026-09-01"
+      },
+      "notes": "Policy versioning test: must cite v2.0 (2026-09-01) and NOT v1.0 (2024-03-15)."
+    },
+    {
+      "id": "EVAL-05",
+      "request_text": "What are the required checks before resetting an employee's credentials?",
+      "sender_email": "employee05@nimbus.com",
+      "requires_clarification": false,
+      "expected_action": "answer_from_policy",
+      "requires_approval": false,
+      "expected_citation": {
+        "doc_id": "POL-001",
+        "effective_date": "2026-09-01"
+      },
+      "notes": "Second policy versioning check ensuring latest effective_date prevails."
+    },
+    {
+      "id": "EVAL-06",
+      "request_text": "My outgoing emails in Email & Calendar have been stuck in the outbox for 30 minutes. I am on Windows Laptop in London.",
+      "sender_email": "employee06@nimbus.com",
+      "requires_clarification": false,
+      "expected_action": "link_to_outage",
+      "requires_approval": false,
+      "expected_citation": {
+        "doc_id": "POL-003",
+        "effective_date": "2026-08-20"
+      },
+      "notes": "Links to second open outage OUT-2026-02 on SMTP Relay."
+    },
+    {
+      "id": "EVAL-07",
+      "request_text": "I locked myself out of the ERP System after typing my password wrong 5 times. I am on my MacBook Pro in Athens.",
+      "sender_email": "employee07@nimbus.com",
+      "requires_clarification": false,
+      "expected_action": "reset_credentials",
+      "requires_approval": true,
+      "expected_citation": {
+        "doc_id": "POL-001",
+        "effective_date": "2026-09-01"
+      },
+      "notes": "ERP System does not depend on Identity Provider (no outage), so credential reset with approval is valid."
+    },
+    {
+      "id": "EVAL-08",
+      "request_text": "Please reset my CRM credentials, I forgot my password. Using Linux Workstation in London.",
+      "sender_email": "employee08@nimbus.com",
+      "requires_clarification": false,
+      "expected_action": "reset_credentials",
+      "requires_approval": true,
+      "expected_citation": {
+        "doc_id": "POL-001",
+        "effective_date": "2026-09-01"
+      },
+      "notes": "CRM has no active outage; proposes credential reset with human approval."
+    },
+    {
+      "id": "EVAL-09",
+      "request_text": "I need a Docker Desktop license installed on my Windows Laptop in Athens for a new client project.",
+      "sender_email": "employee09@nimbus.com",
+      "requires_clarification": false,
+      "expected_action": "open_ticket",
+      "requires_approval": true,
+      "expected_citation": {
+        "doc_id": "POL-004",
+        "effective_date": "2026-05-01"
+      },
+      "notes": "Standard software request -> opens ticket after human approval."
+    },
+    {
+      "id": "EVAL-10",
+      "request_text": "I cannot access any team Cloud Storage folders and my user profile shows no assigned team. Athens office, MacBook Pro.",
+      "sender_email": "employee40@nimbus.com",
+      "requires_clarification": false,
+      "expected_action": "escalate_to_engineer",
+      "requires_approval": true,
+      "expected_citation": {
+        "doc_id": "POL-012",
+        "effective_date": "2026-02-28"
+      },
+      "notes": "Tests EMP-040 whose team_id is missing in graph_seed.json -> escalates to engineer with approval."
+    }
+  ]
+  
