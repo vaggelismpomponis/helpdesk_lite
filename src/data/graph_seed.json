@@ -1,0 +1,551 @@
+{
+  "company": "Nimbus Analytics",
+  "teams": [
+    {
+      "team_id": "TEAM-01",
+      "name": "Finance",
+      "lead_email": "elena.kostopoulou@nimbus.com"
+    },
+    {
+      "team_id": "TEAM-02",
+      "name": "Engineering",
+      "lead_email": "nikos.alexiou@nimbus.com"
+    },
+    {
+      "team_id": "TEAM-03",
+      "name": "HR",
+      "lead_email": "sofia.dimitriou@nimbus.com"
+    },
+    {
+      "team_id": "TEAM-04",
+      "name": "Legal",
+      "lead_email": "giorgos.papas@nimbus.com"
+    },
+    {
+      "team_id": "TEAM-05",
+      "name": "Sales",
+      "lead_email": "anna.markou@nimbus.com"
+    },
+    {
+      "team_id": "TEAM-06",
+      "name": "Operations",
+      "lead_email": "dimitris.karras@nimbus.com"
+    },
+    {
+      "team_id": "TEAM-07",
+      "name": "Data Analytics",
+      "lead_email": "katerina.vlachou@nimbus.com"
+    },
+    {
+      "team_id": "TEAM-08",
+      "name": "Executive",
+      "lead_email": "kostas.oikonomou@nimbus.com"
+    }
+  ],
+  "employees": [
+    {
+      "employee_id": "EMP-001",
+      "name": "Maria Papadopoulou",
+      "email": "maria.papadopoulou@nimbus.com",
+      "office": "Athens",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-01"
+    },
+    {
+      "employee_id": "EMP-002",
+      "name": "Employee 02",
+      "email": "employee02@nimbus.com",
+      "office": "Athens",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-03"
+    },
+    {
+      "employee_id": "EMP-003",
+      "name": "Employee 03",
+      "email": "employee03@nimbus.com",
+      "office": "London",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-04"
+    },
+    {
+      "employee_id": "EMP-004",
+      "name": "Employee 04",
+      "email": "employee04@nimbus.com",
+      "office": "Athens",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-05"
+    },
+    {
+      "employee_id": "EMP-005",
+      "name": "Employee 05",
+      "email": "employee05@nimbus.com",
+      "office": "London",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-06"
+    },
+    {
+      "employee_id": "EMP-006",
+      "name": "Employee 06",
+      "email": "employee06@nimbus.com",
+      "office": "Athens",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-07"
+    },
+    {
+      "employee_id": "EMP-007",
+      "name": "Employee 07",
+      "email": "employee07@nimbus.com",
+      "office": "London",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-08"
+    },
+    {
+      "employee_id": "EMP-008",
+      "name": "Employee 08",
+      "email": "employee08@nimbus.com",
+      "office": "Athens",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-01"
+    },
+    {
+      "employee_id": "EMP-009",
+      "name": "Employee 09",
+      "email": "employee09@nimbus.com",
+      "office": "London",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-02"
+    },
+    {
+      "employee_id": "EMP-010",
+      "name": "Employee 10",
+      "email": "employee10@nimbus.com",
+      "office": "Athens",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-03"
+    },
+    {
+      "employee_id": "EMP-011",
+      "name": "Employee 11",
+      "email": "employee11@nimbus.com",
+      "office": "London",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-04"
+    },
+    {
+      "employee_id": "EMP-012",
+      "name": "Employee 12",
+      "email": "employee12@nimbus.com",
+      "office": "Athens",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-05"
+    },
+    {
+      "employee_id": "EMP-013",
+      "name": "Employee 13",
+      "email": "employee13@nimbus.com",
+      "office": "London",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-06"
+    },
+    {
+      "employee_id": "EMP-014",
+      "name": "Employee 14",
+      "email": "employee14@nimbus.com",
+      "office": "Athens",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-07"
+    },
+    {
+      "employee_id": "EMP-015",
+      "name": "Employee 15",
+      "email": "employee15@nimbus.com",
+      "office": "London",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-08"
+    },
+    {
+      "employee_id": "EMP-016",
+      "name": "Employee 16",
+      "email": "employee16@nimbus.com",
+      "office": "Athens",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-01"
+    },
+    {
+      "employee_id": "EMP-017",
+      "name": "Employee 17",
+      "email": "employee17@nimbus.com",
+      "office": "London",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-02"
+    },
+    {
+      "employee_id": "EMP-018",
+      "name": "Employee 18",
+      "email": "employee18@nimbus.com",
+      "office": "Athens",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-03"
+    },
+    {
+      "employee_id": "EMP-019",
+      "name": "Employee 19",
+      "email": "employee19@nimbus.com",
+      "office": "London",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-04"
+    },
+    {
+      "employee_id": "EMP-020",
+      "name": "Employee 20",
+      "email": "employee20@nimbus.com",
+      "office": "Athens",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-05"
+    },
+    {
+      "employee_id": "EMP-021",
+      "name": "Employee 21",
+      "email": "employee21@nimbus.com",
+      "office": "London",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-06"
+    },
+    {
+      "employee_id": "EMP-022",
+      "name": "Employee 22",
+      "email": "employee22@nimbus.com",
+      "office": "Athens",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-07"
+    },
+    {
+      "employee_id": "EMP-023",
+      "name": "Employee 23",
+      "email": "employee23@nimbus.com",
+      "office": "London",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-08"
+    },
+    {
+      "employee_id": "EMP-024",
+      "name": "Employee 24",
+      "email": "employee24@nimbus.com",
+      "office": "Athens",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-01"
+    },
+    {
+      "employee_id": "EMP-025",
+      "name": "Employee 25",
+      "email": "employee25@nimbus.com",
+      "office": "London",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-02"
+    },
+    {
+      "employee_id": "EMP-026",
+      "name": "Employee 26",
+      "email": "employee26@nimbus.com",
+      "office": "Athens",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-03"
+    },
+    {
+      "employee_id": "EMP-027",
+      "name": "Employee 27",
+      "email": "employee27@nimbus.com",
+      "office": "London",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-04"
+    },
+    {
+      "employee_id": "EMP-028",
+      "name": "Employee 28",
+      "email": "employee28@nimbus.com",
+      "office": "Athens",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-05"
+    },
+    {
+      "employee_id": "EMP-029",
+      "name": "Employee 29",
+      "email": "employee29@nimbus.com",
+      "office": "London",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-06"
+    },
+    {
+      "employee_id": "EMP-030",
+      "name": "Employee 30",
+      "email": "employee30@nimbus.com",
+      "office": "Athens",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-07"
+    },
+    {
+      "employee_id": "EMP-031",
+      "name": "Employee 31",
+      "email": "employee31@nimbus.com",
+      "office": "London",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-08"
+    },
+    {
+      "employee_id": "EMP-032",
+      "name": "Employee 32",
+      "email": "employee32@nimbus.com",
+      "office": "Athens",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-01"
+    },
+    {
+      "employee_id": "EMP-033",
+      "name": "Employee 33",
+      "email": "employee33@nimbus.com",
+      "office": "London",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-02"
+    },
+    {
+      "employee_id": "EMP-034",
+      "name": "Employee 34",
+      "email": "employee34@nimbus.com",
+      "office": "Athens",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-03"
+    },
+    {
+      "employee_id": "EMP-035",
+      "name": "Employee 35",
+      "email": "employee35@nimbus.com",
+      "office": "London",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-04"
+    },
+    {
+      "employee_id": "EMP-036",
+      "name": "Employee 36",
+      "email": "employee36@nimbus.com",
+      "office": "Athens",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-05"
+    },
+    {
+      "employee_id": "EMP-037",
+      "name": "Employee 37",
+      "email": "employee37@nimbus.com",
+      "office": "London",
+      "device": "Windows Laptop",
+      "team_id": "TEAM-06"
+    },
+    {
+      "employee_id": "EMP-038",
+      "name": "Employee 38",
+      "email": "employee38@nimbus.com",
+      "office": "Athens",
+      "device": "Linux Workstation",
+      "team_id": "TEAM-07"
+    },
+    {
+      "employee_id": "EMP-039",
+      "name": "Employee 39",
+      "email": "employee39@nimbus.com",
+      "office": "London",
+      "device": "MacBook Pro",
+      "team_id": "TEAM-08"
+    },
+    {
+      "employee_id": "EMP-040",
+      "name": "Employee 40",
+      "email": "employee40@nimbus.com",
+      "office": "Athens",
+      "device": "Windows Laptop",
+      "team_id": null
+    }
+  ],
+  "services": [
+    {
+      "service_id": "SRV-01",
+      "name": "Identity Provider (SSO)",
+      "owner_team": "TEAM-02"
+    },
+    {
+      "service_id": "SRV-02",
+      "name": "Core Network Gateway",
+      "owner_team": "TEAM-06"
+    },
+    {
+      "service_id": "SRV-03",
+      "name": "PostgreSQL Cluster",
+      "owner_team": "TEAM-02"
+    },
+    {
+      "service_id": "SRV-04",
+      "name": "SMTP Relay",
+      "owner_team": "TEAM-06"
+    },
+    {
+      "service_id": "SRV-05",
+      "name": "Active Directory",
+      "owner_team": "TEAM-06"
+    },
+    {
+      "service_id": "SRV-06",
+      "name": "Cloud Storage",
+      "owner_team": "TEAM-02"
+    },
+    {
+      "service_id": "SRV-07",
+      "name": "API Gateway",
+      "owner_team": "TEAM-02"
+    },
+    {
+      "service_id": "SRV-08",
+      "name": "Billing Engine",
+      "owner_team": "TEAM-01"
+    },
+    {
+      "service_id": "SRV-09",
+      "name": "Auth Token Service",
+      "owner_team": "TEAM-02"
+    },
+    {
+      "service_id": "SRV-10",
+      "name": "DNS Resolver",
+      "owner_team": "TEAM-06"
+    }
+  ],
+  "applications": [
+    {
+      "app_id": "APP-01",
+      "name": "Corporate VPN",
+      "criticality": "high",
+      "depends_on_services": [
+        "SRV-01",
+        "SRV-02",
+        "SRV-10"
+      ]
+    },
+    {
+      "app_id": "APP-02",
+      "name": "Finance Portal",
+      "criticality": "high",
+      "depends_on_services": [
+        "SRV-01",
+        "SRV-03",
+        "SRV-08"
+      ]
+    },
+    {
+      "app_id": "APP-03",
+      "name": "ERP System",
+      "criticality": "high",
+      "depends_on_services": [
+        "SRV-03",
+        "SRV-07"
+      ]
+    },
+    {
+      "app_id": "APP-04",
+      "name": "HRIS",
+      "criticality": "medium",
+      "depends_on_services": [
+        "SRV-01",
+        "SRV-03"
+      ]
+    },
+    {
+      "app_id": "APP-05",
+      "name": "CRM",
+      "criticality": "medium",
+      "depends_on_services": [
+        "SRV-07",
+        "SRV-09"
+      ]
+    },
+    {
+      "app_id": "APP-06",
+      "name": "Email & Calendar",
+      "criticality": "high",
+      "depends_on_services": [
+        "SRV-04",
+        "SRV-05"
+      ]
+    },
+    {
+      "app_id": "APP-07",
+      "name": "Slack",
+      "criticality": "medium",
+      "depends_on_services": [
+        "SRV-01",
+        "SRV-09"
+      ]
+    },
+    {
+      "app_id": "APP-08",
+      "name": "GitHub Enterprise",
+      "criticality": "high",
+      "depends_on_services": [
+        "SRV-01",
+        "SRV-06"
+      ]
+    },
+    {
+      "app_id": "APP-09",
+      "name": "BI Dashboard",
+      "criticality": "medium",
+      "depends_on_services": [
+        "SRV-03",
+        "SRV-07"
+      ]
+    },
+    {
+      "app_id": "APP-10",
+      "name": "Expense Tracker",
+      "criticality": "low",
+      "depends_on_services": [
+        "SRV-08",
+        "SRV-09"
+      ]
+    },
+    {
+      "app_id": "APP-11",
+      "name": "Payroll App",
+      "criticality": "high",
+      "depends_on_services": [
+        "SRV-03",
+        "SRV-05"
+      ]
+    },
+    {
+      "app_id": "APP-12",
+      "name": "Document Vault",
+      "criticality": "medium",
+      "depends_on_services": [
+        "SRV-01",
+        "SRV-06"
+      ]
+    }
+  ],
+  "outages": [
+    {
+      "outage_id": "OUT-2026-01",
+      "service_id": "SRV-01",
+      "title": "Identity Provider (SSO) Token Validation Degradation",
+      "status": "OPEN",
+      "started_at": "2026-11-13T14:30:00Z",
+      "severity": "critical",
+      "summary": "Intermittent SSO authentication failures affecting Corporate VPN, Finance Portal, and GitHub Enterprise."
+    },
+    {
+      "outage_id": "OUT-2026-02",
+      "service_id": "SRV-04",
+      "title": "Outbound SMTP Relay Queue Delay",
+      "status": "OPEN",
+      "started_at": "2026-11-14T08:15:00Z",
+      "severity": "medium",
+      "summary": "External email delivery delayed by up to 45 minutes due to SMTP Relay saturation."
+    }
+  ]
+}
