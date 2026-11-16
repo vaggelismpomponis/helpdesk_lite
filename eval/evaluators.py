@@ -1,16 +1,17 @@
 """Evaluators for the HelpDesk Lite evaluation run.
 
 Each evaluator compares a run outcome (what the graph did) with the expected outputs of one
-example in ``eval/dataset.json`` and returns ``{"key", "score", "comment"}``, the result
+example in ``src/data/eval_dataset.json`` and returns ``{"key", "score", "comment"}``, the result
 format used by LangSmith evaluators. Score is 1 (pass) or 0 (fail).
 
-The ``RunOutcome`` shape is Quality's proposal for the contracts discussion. Field and action
-names will follow the agreed contracts file.
+Names follow docs/ARCHITECTURE_CONTRACTS.md: ``ActionType`` values, ``ActionStatus`` values and
+the ``doc_id`` / ``effective_date`` citation fields of ``PolicyResult``.
 """
 
 from typing import Any, Literal, NotRequired, TypedDict
 
-STATE_CHANGING_ACTIONS = {"reset_credentials", "open_ticket"}
+# ActionType values that change state and require human approval (contracts, section 5).
+STATE_CHANGING_ACTIONS = {"reset_credentials", "open_ticket", "escalate"}
 
 
 class Citation(TypedDict):
@@ -19,15 +20,13 @@ class Citation(TypedDict):
 
 
 class RunOutcome(TypedDict):
-    """What the evaluators need to read from a finished graph run."""
+    """What the evaluators need to read from a finished graph run (``AgentState``)."""
 
-    fields: dict[str, str | None]  # extracted employee, application, urgency
-    clarification_asked: bool  # the graph interrupted with a clarification question
-    action: str | None  # one of the 5 action types, or None
-    citations: list[Citation]
-    outage_id: str | None
-    escalation_team: str | None
-    approval_requested: bool  # the graph paused for human approval
+    fields: dict[str, str | None]  # extracted_fields: employee, application, symptom, urgency
+    clarification_asked: bool  # the graph interrupted at ask_clarification
+    action_type: str | None  # action_proposal.action_type, or None
+    citations: list[Citation]  # doc_id and effective_date of each cited PolicyResult
+    approval_requested: bool  # the graph interrupted at human_approval
     execution_count: int  # times an action that needs approval was executed
     executed_before_approval: bool
     action_status: NotRequired[Literal["pending", "approved", "executed", "rejected"] | None]
@@ -45,22 +44,13 @@ def _result(key: str, problems: list[str]) -> EvalResult:
 
 
 def correct_action(outcome: RunOutcome, expected: dict[str, Any]) -> EvalResult:
-    """The proposed action, and its outage or escalation target, match the expected ones."""
+    """The proposed action matches the expected one and is not a forbidden one."""
     problems = []
-    action = outcome["action"]
+    action = outcome["action_type"]
     if action != expected["expected_action"]:
         problems.append(f"action {action!r}, expected {expected['expected_action']!r}")
     if action in expected["forbidden_actions"]:
         problems.append(f"forbidden action {action!r}")
-    if expected["outage_id"] is not None and outcome["outage_id"] != expected["outage_id"]:
-        problems.append(f"outage {outcome['outage_id']!r}, expected {expected['outage_id']!r}")
-    if (
-        expected["escalation_team"] is not None
-        and outcome["escalation_team"] != expected["escalation_team"]
-    ):
-        problems.append(
-            f"team {outcome['escalation_team']!r}, expected {expected['escalation_team']!r}"
-        )
     return _result("correct_action", problems)
 
 
@@ -83,9 +73,10 @@ def no_action_without_approval(outcome: RunOutcome, expected: dict[str, Any]) ->
     count = outcome["execution_count"]
     if outcome["executed_before_approval"]:
         problems.append("executed before approval")
-    needs_approval = expected["requires_approval"] or outcome["action"] in STATE_CHANGING_ACTIONS
+    action = outcome["action_type"]
+    needs_approval = expected["requires_approval"] or action in STATE_CHANGING_ACTIONS
     if needs_approval and not outcome["approval_requested"]:
-        problems.append(f"{outcome['action']!r} proposed without requesting approval")
+        problems.append(f"{action!r} proposed without requesting approval")
     if expected["should_execute"] is True and count != 1:
         problems.append(f"executed {count} times, expected exactly 1")
     elif expected["should_execute"] is not True and count != 0:

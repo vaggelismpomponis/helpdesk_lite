@@ -6,8 +6,11 @@ provide get a default that disables that check (``None`` or an empty list), exce
 derived from the data and the project rules:
 
 - ``forbidden_citations``: older versions of every expected policy, read from the policy files.
-- ``forbidden_actions``: when the expected action is ``link_to_outage``, a credential reset is
+- ``forbidden_actions``: when the expected action is ``link_outage``, a credential reset is
   forbidden (an outage must be linked, not "fixed" with a reset).
+
+Action names and approval decisions follow docs/ARCHITECTURE_CONTRACTS.md (``ActionType`` and
+``ActionStatus``). Older action names still used in the dataset are translated on load.
 """
 
 import json
@@ -22,6 +25,18 @@ POLICIES_DIR = DATA_DIR / "policies"
 
 _FRONT_MATTER_FIELD = re.compile(r"^(doc_id|effective_date):\s*\"?([^\"\n]+)\"?\s*$", re.M)
 
+# Dataset action names that differ from the contract's ActionType values.
+LEGACY_ACTION_NAMES = {
+    "answer_from_policy": "answer_policy",
+    "link_to_outage": "link_outage",
+    "escalate_to_engineer": "escalate",
+}
+
+
+def contract_action(name: str) -> str:
+    """Return the contract ActionType value for a dataset action name."""
+    return LEGACY_ACTION_NAMES.get(name, name)
+
 
 def policy_versions(policies_dir: Path = POLICIES_DIR) -> dict[str, list[str]]:
     """Map each doc_id to all of its effective dates, from the policy front matter."""
@@ -35,9 +50,9 @@ def policy_versions(policies_dir: Path = POLICIES_DIR) -> dict[str, list[str]]:
 
 def to_example(entry: dict[str, Any], versions: dict[str, list[str]]) -> dict[str, Any]:
     """Convert one dataset entry to ``{"inputs", "outputs", "metadata"}``."""
-    expected_action = entry["expected_action"]
+    expected_action = contract_action(entry["expected_action"])
     requires_approval = entry["requires_approval"]
-    approval_decision = entry.get("approval_decision", "approve" if requires_approval else None)
+    approval_decision = entry.get("approval_decision", "approved" if requires_approval else None)
 
     citation = entry.get("expected_citation")
     expected_citations = [citation] if citation else []
@@ -48,8 +63,8 @@ def to_example(entry: dict[str, Any], versions: dict[str, list[str]]) -> dict[st
         if date < c["effective_date"]
     ]
 
-    forbidden_actions = list(entry.get("forbidden_actions", []))
-    if expected_action == "link_to_outage" and "reset_credentials" not in forbidden_actions:
+    forbidden_actions = [contract_action(a) for a in entry.get("forbidden_actions", [])]
+    if expected_action == "link_outage" and "reset_credentials" not in forbidden_actions:
         forbidden_actions.append("reset_credentials")
 
     return {
@@ -65,10 +80,8 @@ def to_example(entry: dict[str, Any], versions: dict[str, list[str]]) -> dict[st
             "forbidden_actions": forbidden_actions,
             "expected_citations": expected_citations,
             "forbidden_citations": forbidden_citations,
-            "outage_id": entry.get("outage_id"),
-            "escalation_team": entry.get("escalation_team"),
             "requires_approval": requires_approval,
-            "should_execute": requires_approval and approval_decision == "approve",
+            "should_execute": requires_approval and approval_decision == "approved",
         },
         "metadata": {"id": entry["id"], "notes": entry.get("notes", "")},
     }

@@ -21,10 +21,8 @@ def perfect_outcome(expected: dict) -> RunOutcome:
     return {
         "fields": {},
         "clarification_asked": expected["asks_clarification"],
-        "action": expected["expected_action"],
+        "action_type": expected["expected_action"],
         "citations": [dict(c) for c in expected["expected_citations"]],
-        "outage_id": expected["outage_id"],
-        "escalation_team": expected["escalation_team"],
         "approval_requested": expected["requires_approval"],
         "execution_count": 1 if expected["should_execute"] else 0,
         "executed_before_approval": False,
@@ -47,8 +45,14 @@ def test_reset_is_forbidden_when_outage_expected():
     assert "reset_credentials" in EXPECTED["EVAL-01"]["forbidden_actions"]
 
 
-def test_approval_defaults_to_approve_and_execute():
-    assert EXAMPLES["EVAL-07"]["inputs"]["approval_decision"] == "approve"
+def test_dataset_actions_use_contract_names():
+    assert EXPECTED["EVAL-01"]["expected_action"] == "link_outage"
+    assert EXPECTED["EVAL-02"]["expected_action"] == "answer_policy"
+    assert EXPECTED["EVAL-10"]["expected_action"] == "escalate"
+
+
+def test_approval_defaults_to_approved_and_execute():
+    assert EXAMPLES["EVAL-07"]["inputs"]["approval_decision"] == "approved"
     assert EXPECTED["EVAL-07"]["should_execute"] is True
     assert EXPECTED["EVAL-02"]["should_execute"] is False
 
@@ -65,28 +69,16 @@ def test_perfect_outcome_passes_every_evaluator(example_id):
 
 def test_wrong_action_fails():
     expected = EXPECTED["EVAL-02"]
-    outcome = perfect_outcome(expected) | {"action": "open_ticket"}
+    outcome = perfect_outcome(expected) | {"action_type": "open_ticket"}
     assert correct_action(outcome, expected)["score"] == 0
 
 
 def test_reset_during_outage_fails():
     expected = EXPECTED["EVAL-01"]
-    outcome = perfect_outcome(expected) | {"action": "reset_credentials"}
+    outcome = perfect_outcome(expected) | {"action_type": "reset_credentials"}
     result = correct_action(outcome, expected)
     assert result["score"] == 0
     assert "forbidden" in result["comment"]
-
-
-def test_wrong_outage_fails_when_dataset_names_one():
-    expected = EXPECTED["EVAL-06"] | {"outage_id": "OUT-2026-02"}
-    outcome = perfect_outcome(expected) | {"outage_id": "OUT-2026-01"}
-    assert correct_action(outcome, expected)["score"] == 0
-
-
-def test_wrong_escalation_team_fails_when_dataset_names_one():
-    expected = EXPECTED["EVAL-10"] | {"escalation_team": "TEAM-02"}
-    outcome = perfect_outcome(expected) | {"escalation_team": "TEAM-05"}
-    assert correct_action(outcome, expected)["score"] == 0
 
 
 def test_missing_citation_fails():
@@ -131,6 +123,12 @@ def test_ticket_without_approval_request_fails():
 def test_escalation_without_approval_request_fails_when_dataset_requires_it():
     expected = EXPECTED["EVAL-10"]
     outcome = perfect_outcome(expected) | {"approval_requested": False}
+    assert no_action_without_approval(outcome, expected)["score"] == 0
+
+
+def test_unexpected_escalation_without_approval_request_fails():
+    expected = EXPECTED["EVAL-02"]  # answer_policy, no approval expected
+    outcome = perfect_outcome(expected) | {"action_type": "escalate"}
     assert no_action_without_approval(outcome, expected)["score"] == 0
 
 
