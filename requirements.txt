@@ -1,0 +1,5 @@
+psycopg[binary]>=3.2,<4
+neo4j>=5.20,<6
+pydantic>=2.7,<3
+langchain-openai>=0.2  # optional: only used when OPENAI_API_KEY is set
+pytest>=8
