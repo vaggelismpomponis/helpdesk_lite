@@ -25,10 +25,12 @@ Status: `Proposed` (προτάθηκε) · `Decided` (συμφωνήθηκε) ·
 | 8 | Review rotation | Προτεινόμενος πίνακας στο [`roles/README.md`](./roles/README.md#rotation-reviews-προτεινόμενο) | Proposed | |
 | 9 | Definition of Done | 8 κριτήρια στο [`PROJECT_CHECKLIST.md`](./PROJECT_CHECKLIST.md#6-definition-of-done) | Proposed | [README](../README.md#definition-of-done) |
 | 10 | Code conventions | Python με type hints, Pydantic, μικρά nodes, χωρίς hardcoded credentials, `.env.example` ενημερωμένο. | Proposed | [AGENTS.md](../AGENTS.md) |
-| 11 | Contracts | State, models, 5 actions, tool signatures: _link στο αρχείο όταν δημιουργηθεί_ | Open | |
+| 11 | Contracts | State (`AgentState`), Pydantic models (`ExtractedFields`, `PolicyResult`, `GraphResult`, `ActionProposal`), 5 actions (`ActionType`), status (`pending`, `approved`, `executed`, `rejected`), tool signatures (`retrieve_policy`, `check_graph`), κανόνας `thread_id` ↔ Chainlit session. | Decided | [ARCHITECTURE_CONTRACTS.md](./ARCHITECTURE_CONTRACTS.md), [`src/agent/schemas.py`](../src/agent/schemas.py), Issue #2 |
 | 12 | Pair/mob sessions | Μία στη μέση κάθε εβδομάδας. Ημέρα/ώρα: _TBD_ | Open | |
-| 13 | Dependencies | Όχι νέα χωρίς ανάγκη, αναφορά στο PR. | Proposed | [AGENTS.md](../AGENTS.md) |
+| 13 | Dependencies & Pinned Versions Policy | Αυστηρό pinning με `==` στο `requirements.txt` και immutable tags στα Docker base images (`python:3.11-slim`, `pgvector/pgvector:pg16`, `neo4j:5.26.0`). Καμία χρήση `:latest` ή `>=`. Αναφορά στο PR και commit scope `deps`. | Decided | [PINNED_VERSIONS.md](./PINNED_VERSIONS.md), Issue #2 |
 | 14 | Secrets | Κανένα credential στο repo, `.env` εκτός version control. | Proposed | [AGENTS.md](../AGENTS.md) |
+| 15 | Repo Structure & Module Boundaries | Δομή: `src/` (`src/agent/` [Workflow], `src/ui/` [Interface], `src/db/` [Platform], `src/core/` [Platform]), `docker/` (`docker/postgres/init.sql` [Platform]), `scripts/` (`ingest_policies.py`, `seed_neo4j.py` [Knowledge]), `data/` (`policies/`, `eval_dataset.json`, `graph_seed.json` [Knowledge/Quality]), `tests/` & `evals/` [Quality], `docs/` [All/Quality]. Σαφή όρια χωρίς τροποποίηση κοινών αρχείων. | Decided | [COLLABORATION_GUIDE.md](./COLLABORATION_GUIDE.md), [roles/README.md](./roles/README.md), Issue #2 |
+| 16 | Docker Base Images & Runtime Pinning | `python:3.11-slim` (app service), `pgvector/pgvector:pg16` (Postgres + pgvector), `neo4j:5.26.0` (Neo4j). Όλα τα services εκκινούν σε <10′ σε καθαρό clone. | Decided | [PINNED_VERSIONS.md](./PINNED_VERSIONS.md), Issue #2 |
 
 ## Log αποφάσεων
 
@@ -37,7 +39,17 @@ Status: `Proposed` (προτάθηκε) · `Decided` (συμφωνήθηκε) ·
 | Ημερομηνία | Ρόλος | Απόφαση / Αλλαγή | Γιατί | Πηγή |
 |---|---|---|---|---|
 | 2026-11-11 | Quality | Δημιουργία role map, project checklist και αυτού του log | Να παρακολουθούμε την πρόοδο και να έχουμε υλικό για το `CONTRIBUTING.md` | _PR TBD_ |
-| | | | | |
+| 2026-11-16 | Platform | Day 1 Kick-off: Συμφωνία αρχιτεκτονικών συμβολαίων (State, Pydantic models, 5 actions, tool signatures, κανόνας `thread_id` ↔ session), επίσημη δομή repository (`src/`, `docker/`, `scripts/`, `data/`, `tests/`, `evals/`, `docs/`) με σαφή module boundaries, και πολιτική pinned versions για Docker images και Python dependencies (`requirements.txt`). | Διασφάλιση κοινής βάσης, ανεξάρτητη παράλληλη ανάπτυξη με mocks χωρίς merge conflicts, και εγγύηση εκκίνησης stack σε <10′ σε όλα τα λειτουργικά συστήματα (Windows/Linux/macOS). | Issue #2, [ARCHITECTURE_CONTRACTS.md](./ARCHITECTURE_CONTRACTS.md), [PINNED_VERSIONS.md](./PINNED_VERSIONS.md), [COLLABORATION_GUIDE.md](./COLLABORATION_GUIDE.md) |
+
+## Team Sign-off (Day 1 Contracts & Platform Alignment)
+
+| Ρόλος | Εκπρόσωπος | Πεδίο Συμφωνίας | Status | Ημερομηνία |
+|---|---|---|---|---|
+| **Platform** | @vaggelismpomponis (Primary) | Pinned versions policy (Docker & Python), Repo Structure, Compose readiness | **Signed-off** | 2026-11-16 |
+| **Workflow** | All members | `AgentState`, Pydantic models, 5 action types, `thread_id` session mapping | **Signed-off** | 2026-11-16 |
+| **Interface** | @AlexZarkalis | Interrupt payload contracts, Approval cards, UI progress steps | **Signed-off** | 2026-11-16 |
+| **Knowledge** | @stef-fot | `PolicyResult` & `GraphResult` tool signatures, `effective_date` precedence | **Signed-off** | 2026-11-16 |
+| **Quality** | @VickyMil-ai | Evaluator contracts, 10 test scenarios alignment, CONTRIBUTING.md consistency | **Signed-off** | 2026-11-16 |
 
 ## Log προόδου και προβλημάτων (προαιρετικό)
 
