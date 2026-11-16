@@ -35,7 +35,7 @@
 
 - [x] Δομή repo και pinned versions συμφωνημένα και καταγεγραμμένα ([CONTRIBUTING_LOG.md](../CONTRIBUTING_LOG.md), [PINNED_VERSIONS.md](../PINNED_VERSIONS.md), [ARCHITECTURE_CONTRACTS.md](../ARCHITECTURE_CONTRACTS.md))
 - [x] `docker-compose.yml`: Postgres + pgvector, Neo4j, healthchecks, volumes
-- [ ] `.env.example` πλήρες, `.env` εκτός version control
+- [x] `.env.example` πλήρες, `.env` εκτός version control
 - [x] Postgres init: extension pgvector, schema για tickets και checkpoints
 - [ ] Dockerfile και app service
 - [ ] README: Getting Started δοκιμασμένο
