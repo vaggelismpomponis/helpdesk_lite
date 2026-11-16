@@ -34,9 +34,9 @@
 ## Role checklist
 
 - [x] Δομή repo και pinned versions συμφωνημένα και καταγεγραμμένα ([CONTRIBUTING_LOG.md](../CONTRIBUTING_LOG.md), [PINNED_VERSIONS.md](../PINNED_VERSIONS.md), [ARCHITECTURE_CONTRACTS.md](../ARCHITECTURE_CONTRACTS.md))
-- [ ] `docker-compose.yml`: Postgres + pgvector, Neo4j, healthchecks, volumes
+- [x] `docker-compose.yml`: Postgres + pgvector, Neo4j, healthchecks, volumes
 - [ ] `.env.example` πλήρες, `.env` εκτός version control
-- [ ] Postgres init: extension pgvector, schema για tickets και checkpoints
+- [x] Postgres init: extension pgvector, schema για tickets και checkpoints
 - [ ] Dockerfile και app service
 - [ ] README: Getting Started δοκιμασμένο
 - [ ] Clean-clone test σε ≥3 laptops (Ημ. 5)
