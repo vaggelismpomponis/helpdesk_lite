@@ -10,9 +10,9 @@
 ## Βήματα
 
 ### Φάση 1 – Kick-off (Ημ. 1)
-1. Συμμετοχή στη συμφωνία contracts (State, models, 5 actions, tool signatures).
-2. Προτείνει δομή repo (`app/`, `scripts/`, `data/`, `docker/`) και την καταγράφει στο `CONTRIBUTING_LOG.md`.
-3. Ορίζει την πολιτική pinned versions για images και Python dependencies.
+1. Συμμετοχή στη συμφωνία contracts (State, models, 5 actions, tool signatures – [`ARCHITECTURE_CONTRACTS.md`](../ARCHITECTURE_CONTRACTS.md)).
+2. Προτείνει δομή repo (`src/` [ή `app/`], `scripts/`, `data/`, `docker/`) και την καταγράφει στο [`CONTRIBUTING_LOG.md`](../CONTRIBUTING_LOG.md).
+3. Ορίζει την πολιτική pinned versions για images και Python dependencies ([`PINNED_VERSIONS.md`](../PINNED_VERSIONS.md)).
 
 ### Φάση 2 – Stack (Ημ. 2–4)
 4. `docker-compose.yml` με Postgres + pgvector (extension `vector` ενεργό) και Neo4j. Volumes και healthchecks.
@@ -33,7 +33,7 @@
 
 ## Role checklist
 
-- [ ] Δομή repo και pinned versions συμφωνημένα και καταγεγραμμένα
+- [x] Δομή repo και pinned versions συμφωνημένα και καταγεγραμμένα ([CONTRIBUTING_LOG.md](../CONTRIBUTING_LOG.md), [PINNED_VERSIONS.md](../PINNED_VERSIONS.md), [ARCHITECTURE_CONTRACTS.md](../ARCHITECTURE_CONTRACTS.md))
 - [ ] `docker-compose.yml`: Postgres + pgvector, Neo4j, healthchecks, volumes
 - [ ] `.env.example` πλήρες, `.env` εκτός version control
 - [ ] Postgres init: extension pgvector, schema για tickets και checkpoints
