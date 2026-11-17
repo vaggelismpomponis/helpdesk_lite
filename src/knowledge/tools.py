@@ -27,11 +27,16 @@ RETURN a.name AS application, collect(DISTINCT s.name) AS dependencies,
 """
 
 
-def retrieve_policy(query: str) -> PolicyResult | None:
-    """Best-matching chunk of the current version of each policy; None if nothing is indexed."""
+def retrieve_policy(query: str, application: str | None = None) -> PolicyResult | None:
+    """Best-matching chunk of the current version of each policy; None if nothing is indexed.
+
+    `application` only sharpens the query text (policies are not tagged per application).
+    """
+    if application:
+        query = f"{application}: {query}"
     with pg() as conn:
         row = conn.execute(POLICY_SQL, (vec(embed([query])[0]),)).fetchone()
-    return PolicyResult(text=row[0], doc_id=row[1], effective_date=row[2], source=row[3]) if row else None
+    return PolicyResult(text=row[0], doc_id=row[1], effective_date=row[2].isoformat(), source=row[3]) if row else None
 
 
 def check_graph(application: str) -> GraphResult:
@@ -48,5 +53,6 @@ def check_graph(application: str) -> GraphResult:
         application=r["application"],
         found=True,
         dependencies=r["dependencies"],
-        active_outages=[Outage(**o) for o in r["outages"]],
+        active_outages=sorted({o["service"] for o in r["outages"]}),
+        outages=[Outage(**o) for o in r["outages"]],
     )

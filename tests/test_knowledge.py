@@ -47,7 +47,7 @@ def test_ingest_is_idempotent(stack):
 @needs_pg
 def test_latest_version_wins_over_legacy(stack):
     r = retrieve_policy("I cannot log in, can you reset my password without checking outages?")
-    assert (r.doc_id, str(r.effective_date)) == ("POL-001", "2026-09-01")  # v1 is 2024-03-15
+    assert (r.doc_id, r.effective_date) == ("POL-001", "2026-09-01")  # v1 is 2024-03-15
 
 
 @needs_pg
@@ -58,7 +58,7 @@ def test_future_dated_version_is_ignored(stack):
             " 'FUTURE', embedding FROM policy_chunks WHERE doc_id = 'POL-001' AND effective_date = '2026-09-01'"
         )
     try:
-        assert str(retrieve_policy("password reset").effective_date) != "2999-01-01"
+        assert retrieve_policy("password reset").effective_date != "2999-01-01"
     finally:
         with pg() as c:
             c.execute("DELETE FROM policy_chunks WHERE effective_date = '2999-01-01'")
@@ -72,7 +72,7 @@ def test_citations_for_eval_requests(stack):
     hits = sum(
         1 for i in cited
         if (r := retrieve_policy(i["request_text"]))
-        and (r.doc_id, str(r.effective_date)) == tuple(i["expected_citation"].values())
+        and (r.doc_id, r.effective_date) == tuple(i["expected_citation"].values())
     )
     assert hits / len(cited) >= 0.6, f"{hits}/{len(cited)} citations correct"
 
@@ -82,13 +82,14 @@ def test_citations_for_eval_requests(stack):
 def test_application_with_outage(stack):
     r = check_graph("Corporate VPN")
     assert r.found and "Identity Provider (SSO)" in r.dependencies
-    assert [o.outage_id for o in r.active_outages] == ["OUT-2026-01"]
+    assert r.active_outages == ["Identity Provider (SSO)"] and r.has_active_outage
+    assert [o.outage_id for o in r.outages] == ["OUT-2026-01"]
 
 
 @needs_neo4j
 def test_application_without_outage(stack):
     r = check_graph("ERP System")
-    assert r.found and r.dependencies and r.active_outages == []
+    assert r.found and r.dependencies and not r.has_active_outage
 
 
 @needs_neo4j
