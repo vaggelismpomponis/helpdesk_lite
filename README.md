@@ -117,7 +117,7 @@ Follow these instructions to start the entire HelpDesk Lite stack from a clean c
 ### Prerequisites
 
 - [Docker Engine](https://docs.docker.com/engine/install/) (24.0+)
-- [Docker Compose](https://docs.docker.com/compose/install/) (v2.20+)
+- [Docker Compose](https://docs.docker.com/compose/install/) (v2.24.0+)
 
 ### Quick Start (One-Command Startup)
 
