@@ -155,6 +155,14 @@ class AgentState(BaseModel):
 - If the application container restarts, reloading the Chainlit session resumes execution seamlessly from the checkpoint.
 - Idempotency guard: Before `execute_action` runs, it checks whether `action_id` in Postgres is already `ActionStatus.EXECUTED`. If yes, it skips re-execution to prevent duplicate account resets or tickets.
 
+### 3.1 PostgreSQL Database Schema Contract (`docker/postgres/init.sql`)
+
+The database is initialized automatically with PostgreSQL 16 and `pgvector`:
+- **`tickets`**: Persistent records for IT support tickets created via `ActionType.OPEN_TICKET`.
+- **`audit_log`**: Complete audit trail and idempotency guard tracking `action_id`, `thread_id`, `action_type`, status (`pending`, `approved`, `executed`, `rejected`), parameters, rationale, and execution timestamps.
+- **`checkpoints` / `checkpoint_blobs` / `checkpoint_writes` / `checkpoint_migrations`**: Standard schema for LangGraph's `PostgresSaver` enabling state preservation and interruption recovery across application restarts.
+- **`policy_chunks`**: Document embeddings (`vector(1536)`) with metadata (`doc_id`, `effective_date`) and HNSW cosine index for Knowledge retrieval.
+
 ---
 
 ## 4. Tool Signatures
