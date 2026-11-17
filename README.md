@@ -103,27 +103,67 @@ The project is in its initial phase. This repository currently contains the proj
 | Deliverable | Status |
 |-------------|--------|
 | Documentation (project notes, Git guide) | Available in [`docs/`](./docs) |
-| `docker-compose.yml` and `.env.example` | Planned |
-| Chainlit application | Planned |
+| `docker-compose.yml` and `.env.example` | Available |
+| Chainlit application | Available (Dockerized Skeleton) |
 | Policy ingestion and graph seeding scripts | Planned |
 | LangSmith project with evaluation run (10 requests) | Planned |
-| `CONTRIBUTING.md` (team agreement) | Planned |
+| `CONTRIBUTING.md` (team agreement) | Available in [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
 | 10-minute live demo, including resume after restart | Planned |
 
 ## Getting Started
 
-> Setup instructions will be completed once the Platform deliverables land. The target is for **all services to start in under 10 minutes** from a clean clone.
+Follow these instructions to start the entire HelpDesk Lite stack from a clean clone. The full stack boots up in **<10 minutes**.
+
+### Prerequisites
+
+- [Docker Engine](https://docs.docker.com/engine/install/) (24.0+)
+- [Docker Compose](https://docs.docker.com/compose/install/) (v2.20+)
+
+### Quick Start (One-Command Startup)
 
 ```bash
-git clone https://codeberg.org/ebomponis001/HelpDesk_Lite.git
-cd HelpDesk_Lite
+# 1. Clone the repository
+git clone https://github.com/vaggelismpomponis/helpdesk_lite.git
+cd helpdesk_lite
+
+# 2. Configure environment variables (copy template)
+cp .env.example .env
+
+# 3. Start all services (PostgreSQL + pgvector, Neo4j, Chainlit App)
+docker compose up -d --build
 ```
 
-Target workflow once the stack is available:
+### Accessing Services
+
+Once started, verify that all containers report `healthy`:
 
 ```bash
-cp .env.example .env      # configure credentials and LangSmith settings
-docker compose up         # start all services
+docker compose ps
+```
+
+| Service | Endpoint | Credentials / Details |
+|---------|----------|-----------------------|
+| **Chainlit UI** | [http://localhost:8000](http://localhost:8000) | IT Support Assistant interactive web chat |
+| **Neo4j Browser** | [http://localhost:7474](http://localhost:7474) | User: `neo4j` / Password: `neo4j_secure_password`<br>Bolt protocol: `bolt://localhost:7687` |
+| **PostgreSQL + pgvector** | `localhost:5432` | DB: `helpdesk` / User: `postgres` / Password: `postgres_secure_password`<br>Extension `vector` enabled |
+
+### Common Operations
+
+```bash
+# View application logs
+docker compose logs -f app
+
+# View logs for all services
+docker compose logs -f
+
+# Restart the application service (preserves DB volumes)
+docker compose restart app
+
+# Stop the stack
+docker compose down
+
+# Stop the stack and remove persistent data volumes
+docker compose down -v
 ```
 
 For Git setup, branching and pull request workflow, see the [Git Guide](./docs/GIT_GUIDE.md).

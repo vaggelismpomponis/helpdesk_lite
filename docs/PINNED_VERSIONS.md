@@ -52,7 +52,7 @@ All production, persistence, and test packages are pinned to exact versions in `
 chainlit==1.3.2           # Interactive chat interface, steps, and approval cards
 langgraph==0.2.45         # State graph orchestration, interrupts, checkpoints
 langchain==0.3.7          # Composition and tool abstraction
-langchain-core==0.3.15    # Core Pydantic primitives, messages, runnable protocols
+langchain-core==0.3.17    # Core Pydantic primitives, messages, runnable protocols (resolved for langchain-community 0.3.7)
 langchain-community==0.3.7 # Community integrations
 langchain-openai==0.2.6   # LLM runtime client
 

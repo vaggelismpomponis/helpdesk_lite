@@ -37,8 +37,8 @@
 - [x] `docker-compose.yml`: Postgres + pgvector, Neo4j, healthchecks, volumes
 - [x] `.env.example` πλήρες, `.env` εκτός version control
 - [x] Postgres init: extension pgvector, schema για tickets και checkpoints
-- [ ] Dockerfile και app service
-- [ ] README: Getting Started δοκιμασμένο
+- [x] Dockerfile και app service
+- [x] README: Getting Started δοκιμασμένο
 - [ ] Clean-clone test σε ≥3 laptops (Ημ. 5)
 - [ ] Χρόνος εκκίνησης <10′ μετρημένος
 - [ ] Seeding/ingestion τρέχουν χωρίς χειροκίνητα βήματα
