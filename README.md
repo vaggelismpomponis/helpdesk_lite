@@ -126,6 +126,14 @@ cp .env.example .env      # configure credentials and LangSmith settings
 docker compose up         # start all services
 ```
 
+### Upgrading Existing Database Volumes
+
+If you have an existing PostgreSQL Docker volume (`postgres_data`) from an earlier version of the stack, run the non-destructive upgrade migration to backfill tickets and add required audit log and LangGraph checkpoint tables:
+
+```bash
+docker compose exec -T postgres psql -U postgres -d helpdesk < docker/postgres/migrations/001_upgrade_schema.sql
+```
+
 For Git setup, branching and pull request workflow, see the [Git Guide](./docs/GIT_GUIDE.md).
 
 ## Governance and Constraints

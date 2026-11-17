@@ -155,6 +155,33 @@ class AgentState(BaseModel):
 - If the application container restarts, reloading the Chainlit session resumes execution seamlessly from the checkpoint.
 - Idempotency guard: Before `execute_action` runs, it checks whether `action_id` in Postgres is already `ActionStatus.EXECUTED`. If yes, it skips re-execution to prevent duplicate account resets or tickets.
 
+### 3.1 PostgreSQL Database Schema Contract (`docker/postgres/init.sql`)
+
+The database is initialized automatically with PostgreSQL 16 and `pgvector`:
+- **`tickets`**: Persistent records for IT support tickets created via `ActionType.OPEN_TICKET`.
+- **`audit_log`**: Complete audit trail and idempotency guard tracking `action_id`, `thread_id`, `action_type`, status (`pending`, `approved`, `executed`, `rejected`), parameters, rationale, and execution timestamps.
+- **`checkpoints` / `checkpoint_blobs` / `checkpoint_writes` / `checkpoint_migrations`**: Standard schema for LangGraph's `PostgresSaver` enabling state preservation and interruption recovery across application restarts.
+- **`policy_chunks`**: Document embeddings (`vector(1536)`) with metadata (`doc_id`, `effective_date`) and HNSW cosine index for Knowledge retrieval.
+
+#### 3.1.1 Schema Upgrade & Migration for Existing Volumes (`docker/postgres/migrations/001_upgrade_schema.sql`)
+
+When PostgreSQL is started with an existing Docker volume (`postgres_data`), PostgreSQL skips `/docker-entrypoint-initdb.d/init.sql`. In addition, running `init.sql` against an existing database does not add newly added columns because of `CREATE TABLE IF NOT EXISTS`.
+
+To upgrade an existing volume safely and non-destructively:
+- **Migration script:** [`docker/postgres/migrations/001_upgrade_schema.sql`](../docker/postgres/migrations/001_upgrade_schema.sql)
+- **Safe column additions:** Uses `ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ...` for `symptom`, `urgency`, and `details`.
+- **Data backfilling:** Automatically backfills existing tickets with placeholder/default values (`symptom = 'Unspecified symptom (migrated ticket)'`, `urgency = 'medium'`, `details = '{}'`) before enforcing `symptom NOT NULL` and `urgency NOT NULL`.
+- **Idempotency & Checkpointer tables:** Creates `audit_log`, `checkpoint_migrations`, `checkpoints`, `checkpoint_blobs`, `checkpoint_writes` and all required indexes.
+
+**How to apply to an active or existing container volume:**
+```bash
+# Option 1: Execute via stdin
+docker compose exec -T postgres psql -U postgres -d helpdesk < docker/postgres/migrations/001_upgrade_schema.sql
+
+# Option 2: Execute from within container mount
+docker compose exec postgres psql -U postgres -d helpdesk -f /docker/migrations/001_upgrade_schema.sql
+```
+
 ---
 
 ## 4. Tool Signatures
