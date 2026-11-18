@@ -96,6 +96,11 @@ def find_application(text: str) -> Optional[str]:
         aliases = {app["name"], app["name"].removeprefix("Corporate ")}
         if any(re.search(rf"\b{re.escape(a.lower())}\b", lowered) for a in aliases):
             return app["name"]
+    for srv in SEED["services"]:
+        if re.search(rf"\b{re.escape(srv['name'].lower())}\b", lowered):
+            return srv["name"]
+    if "docker desktop" in lowered or "docker" in lowered:
+        return "Docker Desktop"
     return None
 
 

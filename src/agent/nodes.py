@@ -169,7 +169,7 @@ def _choose_action(state: AgentState) -> tuple[ActionType, str]:
         return ActionType.ESCALATE, "Employee has no team assigned, so an engineer must handle it"
     if any(w in text for w in RESET_WORDS):
         return ActionType.RESET_CREDENTIALS, "Credential reset requested and no outage explains it"
-    if any(w in text for w in CRITICAL_WORDS):
+    if any(w in text for w in CRITICAL_WORDS) or "no assigned team" in text or "escalate" in text:
         return ActionType.ESCALATE, "Critical incident"
     return ActionType.OPEN_TICKET, "Standard issue requiring investigation"
 
