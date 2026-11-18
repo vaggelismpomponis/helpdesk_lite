@@ -106,7 +106,7 @@ class TestPostgresSchemaInit(unittest.TestCase):
 
     def test_policy_chunks_table_and_columns(self):
         self.assertIn("CREATE TABLE IF NOT EXISTS policy_chunks", self.sql_content)
-        for col in ["doc_id", "title", "effective_date", "source", "chunk_text", "embedding"]:
+        for col in ["doc_id", "title", "effective_date", "source", "content", "chunk_index", "embedding"]:
             self.assertRegex(
                 self.sql_content,
                 rf"\b{col}\b",
