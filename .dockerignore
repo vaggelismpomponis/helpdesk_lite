@@ -17,5 +17,4 @@ ENV
 dist
 build
 .chainlit
-chainlit.md
 docs/images

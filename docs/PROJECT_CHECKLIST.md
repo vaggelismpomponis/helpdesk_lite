@@ -37,7 +37,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 
 - [ ] Mocks αντικαταστάθηκαν με πραγματικά tools
 - [ ] Interrupt για clarification και approval
-- [ ] Approve/Reject στο UI
+- [x] Approve/Reject στο UI
 - [ ] Idempotent `execute_action`
 - [x] Resume μετά από restart
 - [x] Restart test: καμία διπλή εκτέλεση
@@ -70,7 +70,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 | Ρόλος | Checklist | Πρόοδος | Owner | Backup |
 |---|---|---|---|---|
 | Platform | [`platform.md`](./roles/platform.md) | 13/13 | @vaggelismpomponis | Workflow |
-| Interface | [`interface.md`](./roles/interface.md) | 0/14 | _TBD_ | _TBD_ |
+| Interface | [`interface.md`](./roles/interface.md) | 8/14 | @AlexZarkalis | Workflow |
 | Workflow | [`workflow.md`](./roles/workflow.md) | 0/14 | _TBD_ | _TBD_ |
 | Knowledge | [`knowledge.md`](./roles/knowledge.md) | 0/13 | _TBD_ | _TBD_ |
 | Quality | [`quality.md`](./roles/quality.md) | 0/16 | _TBD_ | _TBD_ |

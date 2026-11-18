@@ -32,14 +32,14 @@
 
 ## Role checklist
 
-- [ ] Contract UI ↔ graph (interrupt payloads) συμφωνημένο
-- [ ] Κανόνας `thread_id` ↔ Chainlit session υλοποιημένος
-- [ ] Chat με mock graph
-- [ ] Progress steps ανά node
-- [ ] Clarification μέσω interrupt
-- [ ] Approval card με Approve/Reject
-- [ ] Citations με πηγή και effective date στην τελική απάντηση
-- [ ] UI τρέχει μέσω Docker Compose
+- [x] Contract UI ↔ graph (interrupt payloads) συμφωνημένο
+- [x] Κανόνας `thread_id` ↔ Chainlit session υλοποιημένος
+- [x] Chat με mock graph
+- [x] Progress steps ανά node
+- [x] Clarification μέσω interrupt
+- [x] Approval card με Approve/Reject
+- [x] Citations με πηγή και effective date στην τελική απάντηση
+- [x] UI τρέχει μέσω Docker Compose
 - [ ] Σύνδεση με πραγματικό graph
 - [ ] Resume μετά από restart δουλεύει από το UI
 - [ ] Κανένα διπλό κλικ δεν προκαλεί διπλή ενέργεια
