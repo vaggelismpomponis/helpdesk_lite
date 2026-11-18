@@ -31,6 +31,13 @@ def test_policy_question_is_answered_with_latest_citation(graph):
     assert "POL-016 (effective 2026-01-05)" in result["final_response"]
 
 
+def test_polite_request_is_not_a_policy_question(graph):
+    config = new_config()
+    start(graph, config, "Can you reset my ERP System password?")
+    assert pending(graph, config) == "approval"
+    assert graph.get_state(config).values["action_proposal"].action_type == ActionType.RESET_CREDENTIALS
+
+
 def test_outage_links_instead_of_resetting(graph):
     config = new_config()
     result = start(graph, config, "I can't connect to the VPN, please reset my password")

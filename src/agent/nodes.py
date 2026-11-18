@@ -19,8 +19,10 @@ from src.agent.models import (
 )
 
 QUESTION_WORDS = ("what", "how", "do", "does", "is", "are", "can", "which", "when", "where", "who")
+REQUEST_PREFIXES = ("can you", "could you", "would you", "will you", "can i get", "please")
 RESET_WORDS = ("reset", "password", "locked out", "credential")
 CRITICAL_WORDS = ("critical", "production down", "data breach", "security incident")
+CLARIFICATION_QUESTION = "Which application or system is affected?"
 FIELD_PROMPTS = {
     "employee": "who you are (name or work email)",
     "application": "which application or system is affected",
@@ -52,8 +54,12 @@ def _user_text(state: AgentState) -> str:
 
 
 def is_question(text: str) -> bool:
-    words = text.strip().split()
-    return bool(words) and words[0].lower().strip("¿") in QUESTION_WORDS and text.rstrip().endswith("?")
+    """Information question ("What is...?"), not a polite request ("Can you reset...?")."""
+    lowered = text.strip().lower()
+    if lowered.startswith(REQUEST_PREFIXES):
+        return False
+    words = lowered.split()
+    return bool(words) and words[0] in QUESTION_WORDS and lowered.endswith("?")
 
 
 def _extract_symptom(text: str, application: str | None = None, employee: str | None = None) -> str | None:

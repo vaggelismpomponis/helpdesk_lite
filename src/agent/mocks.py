@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from src.agent.models import GraphResult, PolicyResult
+from src.knowledge.models import GraphResult, PolicyResult
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 SEED = json.loads((DATA_DIR / "graph_seed.json").read_text(encoding="utf-8"))

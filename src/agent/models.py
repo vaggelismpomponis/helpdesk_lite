@@ -1,9 +1,25 @@
-"""Workflow contracts, as signed off in docs/ARCHITECTURE_CONTRACTS.md (sections 2 and 3)."""
+"""Workflow contracts, as signed off in docs/ARCHITECTURE_CONTRACTS.md (sections 2 and 3).
+
+PolicyResult and GraphResult are owned by Knowledge (src/knowledge/models.py) and re-exported here.
+"""
 
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+
+from src.knowledge.models import GraphResult, PolicyResult
+
+__all__ = [
+    "ActionProposal",
+    "ActionStatus",
+    "ActionType",
+    "AgentState",
+    "ExtractedFields",
+    "GraphResult",
+    "PolicyResult",
+    "STATE_CHANGING_ACTIONS",
+]
 
 
 class ActionType(str, Enum):
@@ -48,23 +64,6 @@ class ExtractedFields(BaseModel):
     @property
     def has_missing_fields(self) -> bool:
         return not self.is_complete()
-
-
-class PolicyResult(BaseModel):
-    text: str = Field(description="Content chunk of the retrieved policy")
-    doc_id: str = Field(description="Unique document ID (e.g. POL-SEC-004)")
-    effective_date: str = Field(description="ISO 8601 date (YYYY-MM-DD) of policy version")
-    source: str = Field(description="Filename or canonical title")
-
-
-class GraphResult(BaseModel):
-    application: str = Field(description="Queried application name")
-    dependencies: List[str] = Field(default_factory=list, description="Dependent backend services")
-    active_outages: List[str] = Field(default_factory=list, description="Services with active outages")
-
-    @property
-    def has_active_outage(self) -> bool:
-        return len(self.active_outages) > 0
 
 
 class ActionProposal(BaseModel):
