@@ -11,6 +11,7 @@ Platform Role | Scope: db, docker
 
 from __future__ import annotations
 
+import inspect
 import json
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -33,6 +34,7 @@ def record_action(
     """Record or update an action proposal in audit_log.
 
     Guarantees unique action_id tracking per Day 1 contracts.
+    Preserves terminal 'executed' status to prevent lifecycle regressions on conflict.
     """
     params_json = json.dumps(parameters or {})
     with get_pooled_connection() as conn:
@@ -47,9 +49,18 @@ def record_action(
                     VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
                     ON CONFLICT (action_id)
                     DO UPDATE SET
-                        status = EXCLUDED.status,
-                        rationale = EXCLUDED.rationale,
-                        parameters = EXCLUDED.parameters
+                        status = CASE
+                            WHEN audit_log.status = 'executed' THEN 'executed'
+                            ELSE EXCLUDED.status
+                        END,
+                        rationale = CASE
+                            WHEN audit_log.status = 'executed' THEN audit_log.rationale
+                            ELSE EXCLUDED.rationale
+                        END,
+                        parameters = CASE
+                            WHEN audit_log.status = 'executed' THEN audit_log.parameters
+                            ELSE EXCLUDED.parameters
+                        END
                     RETURNING *;
                     """,
                     (
@@ -92,8 +103,12 @@ def execute_idempotent(
 ) -> Tuple[bool, Any]:
     """Atomically execute an action proposal with strict idempotency guard.
 
-    Uses row-level locking (SELECT ... FOR UPDATE) in PostgreSQL to ensure
-    concurrent workers or recovered containers do not execute the same action twice.
+    Guarantees:
+    1. Short-circuits if status is already 'executed', preventing duplicate side effects.
+    2. Rejects any status other than 'approved' (e.g. 'pending', 'rejected'), ensuring
+       unapproved actions are never invoked.
+    3. Serializes execution using PostgreSQL row-level locking (SELECT ... FOR UPDATE).
+    4. Downstream operations are passed action_id to enable durable downstream idempotency.
 
     Returns:
         (executed, result):
@@ -111,11 +126,23 @@ def execute_idempotent(
                 if not row:
                     raise ValueError(f"Action '{action_id}' not found in audit_log")
 
-                if row["status"] == "executed":
+                current_status = row["status"]
+
+                if current_status == "executed":
                     # Already executed, skip execution safely
                     return False, "already_executed"
 
-                # Run the state-changing action
+                if current_status != "approved":
+                    raise ValueError(
+                        f"Action '{action_id}' cannot be executed with status '{current_status}'. "
+                        "State-changing actions require explicit human approval."
+                    )
+
+                # Pass action_id to execution_fn if supported by its signature for downstream idempotency
+                sig = inspect.signature(execution_fn)
+                if "action_id" in sig.parameters and "action_id" not in kwargs:
+                    kwargs["action_id"] = action_id
+
                 result = execution_fn(*args, **kwargs)
 
                 # Mark as executed atomically with timestamp
@@ -139,10 +166,10 @@ def create_ticket_idempotent(
     urgency: str = "medium",
     details: Optional[Dict[str, Any]] = None,
 ) -> Tuple[bool, Dict[str, Any]]:
-    """Idempotently insert an IT support ticket into tickets table.
+    """Idempotently insert an IT support ticket into tickets table in a single atomic operation.
 
-    If a ticket with action_id already exists, returns the existing record
-    without duplicating.
+    Uses INSERT ... ON CONFLICT (action_id) DO NOTHING to eliminate race conditions
+    between concurrent workers.
 
     Returns:
         (created, ticket_record):
@@ -153,21 +180,13 @@ def create_ticket_idempotent(
     with get_pooled_connection() as conn:
         with conn.transaction():
             with conn.cursor(row_factory=dict_row) as cur:
-                # Check existing
-                cur.execute(
-                    "SELECT * FROM tickets WHERE action_id = %s;",
-                    (action_id,),
-                )
-                existing = cur.fetchone()
-                if existing:
-                    return False, existing
-
                 cur.execute(
                     """
                     INSERT INTO tickets (
                         action_id, employee, application, symptom, urgency, status, details
                     )
                     VALUES (%s, %s, %s, %s, %s, 'pending', %s::jsonb)
+                    ON CONFLICT (action_id) DO NOTHING
                     RETURNING *;
                     """,
                     (
@@ -179,4 +198,14 @@ def create_ticket_idempotent(
                         details_json,
                     ),
                 )
-                return True, cur.fetchone()
+                inserted = cur.fetchone()
+                if inserted:
+                    return True, inserted
+
+                # Conflict occurred; fetch the pre-existing row atomically
+                cur.execute(
+                    "SELECT * FROM tickets WHERE action_id = %s;",
+                    (action_id,),
+                )
+                existing = cur.fetchone()
+                return False, existing

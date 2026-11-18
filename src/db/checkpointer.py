@@ -10,6 +10,7 @@ Platform Role | Scope: db, docker
 
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, contextmanager
 from types import TracebackType
@@ -219,7 +220,7 @@ class PostgresSaver(
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
-        """List checkpoints matching the criteria."""
+        """List checkpoints matching the criteria, including metadata containment filter."""
         if not config:
             return
 
@@ -232,6 +233,11 @@ class PostgresSaver(
             WHERE thread_id = %s AND checkpoint_ns = %s
         """
         params: list[Any] = [thread_id, checkpoint_ns]
+
+        # Apply JSONB metadata containment predicate matching other LangGraph checkpointers
+        if filter:
+            query += " AND metadata @> %s::jsonb"
+            params.append(json.dumps(filter))
 
         if before:
             before_id = get_checkpoint_id(before)
@@ -378,7 +384,9 @@ class PostgresSaver(
                     cur.execute("DELETE FROM checkpoint_writes WHERE thread_id = %s;", (thread_id,))
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        return self.get_tuple(config)
+        """Asynchronous wrapper offloading blocking DB I/O to thread pool to protect event loop."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.get_tuple, config)
 
     async def alist(
         self,
@@ -388,7 +396,12 @@ class PostgresSaver(
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
-        for item in self.list(config, filter=filter, before=before, limit=limit):
+        """Asynchronous wrapper listing checkpoints without blocking event loop."""
+        loop = asyncio.get_running_loop()
+        items = await loop.run_in_executor(
+            None, lambda: list(self.list(config, filter=filter, before=before, limit=limit))
+        )
+        for item in items:
             yield item
 
     async def aput(
@@ -398,7 +411,11 @@ class PostgresSaver(
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        return self.put(config, checkpoint, metadata, new_versions)
+        """Asynchronous wrapper saving checkpoint without blocking event loop."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, self.put, config, checkpoint, metadata, new_versions
+        )
 
     async def aput_writes(
         self,
@@ -407,7 +424,13 @@ class PostgresSaver(
         task_id: str,
         task_path: str = "",
     ) -> None:
-        return self.put_writes(config, writes, task_id, task_path)
+        """Asynchronous wrapper saving writes without blocking event loop."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, self.put_writes, config, writes, task_id, task_path
+        )
 
     async def adelete_thread(self, thread_id: str) -> None:
-        return self.delete_thread(thread_id)
+        """Asynchronous wrapper deleting thread without blocking event loop."""
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self.delete_thread, thread_id)
