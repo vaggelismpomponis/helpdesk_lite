@@ -102,15 +102,17 @@ CREATE INDEX IF NOT EXISTS idx_checkpoint_writes_thread_id ON checkpoint_writes(
 -- ==============================================================================
 -- 5. Policy Chunks & Vector Store (Knowledge Role)
 -- Stores policy document embeddings with metadata for latest effective date resolution
+-- Primary key: (doc_id, effective_date, chunk_index)
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS policy_chunks (
-    id SERIAL PRIMARY KEY,
     doc_id VARCHAR(64) NOT NULL,
-    title VARCHAR(255) NOT NULL,
     effective_date DATE NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    title VARCHAR(255) NOT NULL,
     source VARCHAR(255) NOT NULL,
-    chunk_text TEXT NOT NULL,
-    embedding vector(1536)
+    content TEXT NOT NULL,
+    embedding vector(1536) NOT NULL,
+    PRIMARY KEY (doc_id, effective_date, chunk_index)
 );
 
 CREATE INDEX IF NOT EXISTS idx_policy_doc_effective ON policy_chunks(doc_id, effective_date DESC);

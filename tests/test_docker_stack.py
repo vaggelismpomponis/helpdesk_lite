@@ -103,3 +103,80 @@ def test_chainlit_starter_app_contracts():
     content = app_py.read_text()
     assert "thread_id" in content
     assert "cl.context.session.id" in content
+
+
+def test_docker_compose_seed_service_defined():
+    """Verify automated seed service and app dependency in docker-compose.yml."""
+    compose_file = REPO_ROOT / "docker-compose.yml"
+    assert compose_file.exists(), "docker-compose.yml must exist"
+
+    data = yaml.safe_load(compose_file.read_text())
+    services = data.get("services", {})
+    assert "seed" in services, "seed service must be defined in compose"
+
+    seed_service = services["seed"]
+    assert seed_service.get("container_name") == "helpdesk_seed"
+    assert "scripts/seed.py" in " ".join(seed_service.get("command", []))
+    assert seed_service.get("restart") == "no"
+
+    app_depends = services["app"].get("depends_on", {})
+    assert "seed" in app_depends, "app service must depend on seed service"
+    assert app_depends["seed"]["condition"] == "service_completed_successfully"
+
+
+def test_seed_script_structure_and_contracts():
+    """Verify scripts/seed.py coordinates knowledge ingestion and neo4j seeding."""
+    seed_script = REPO_ROOT / "scripts" / "seed.py"
+    assert seed_script.exists(), "scripts/seed.py must exist"
+
+    content = seed_script.read_text(encoding="utf-8")
+    assert "ingest" in content
+    assert "seed" in content
+    assert "wait_for_services" in content
+
+
+def test_gitattributes_enforces_lf():
+    """Verify .gitattributes exists and enforces LF line endings for cross-platform stability."""
+    gitattributes = REPO_ROOT / ".gitattributes"
+    assert gitattributes.exists(), ".gitattributes must exist"
+
+    content = gitattributes.read_text()
+    assert "text=auto eol=lf" in content
+    assert "*.sql text eol=lf" in content
+    assert "*.py text eol=lf" in content
+
+
+def test_cross_platform_compose_ports_configurable():
+    """Verify docker-compose.yml ports are parameterizable to prevent port collision friction."""
+    compose_file = REPO_ROOT / "docker-compose.yml"
+    assert compose_file.exists(), "docker-compose.yml must exist"
+
+    content = compose_file.read_text()
+    assert "POSTGRES_PORT" in content
+    assert "APP_PORT" in content
+    assert "NEO4J_HTTP_PORT" in content
+    assert "NEO4J_BOLT_PORT" in content
+
+
+def test_env_example_contains_all_service_ports():
+    """Verify .env.example specifies all configurable ports for clean-clone reproducibility."""
+    env_example = REPO_ROOT / ".env.example"
+    assert env_example.exists(), ".env.example must exist"
+
+    content = env_example.read_text()
+    assert "POSTGRES_PORT=" in content
+    assert "APP_PORT=" in content
+    assert "NEO4J_HTTP_PORT=" in content
+    assert "NEO4J_BOLT_PORT=" in content
+
+
+def test_readme_cross_platform_getting_started():
+    """Verify README.md includes verified cross-platform commands for Windows, Linux, and macOS."""
+    readme = REPO_ROOT / "README.md"
+    assert readme.exists(), "README.md must exist"
+
+    content = readme.read_text()
+    assert "cp .env.example .env" in content
+    assert "Copy-Item .env.example .env" in content
+    assert "copy .env.example .env" in content
+    assert "CLEAN_CLONE_BENCHMARK.md" in content
