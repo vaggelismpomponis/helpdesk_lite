@@ -55,7 +55,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 ## 6. Definition of Done
 
 - [ ] `docker compose up` ξεκινά όλα τα services σε <10′ από καθαρό clone
-- [ ] Τα ingestion και seeding scripts τρέχουν χωρίς χειροκίνητα βήματα
+- [x] Τα ingestion και seeding scripts τρέχουν χωρίς χειροκίνητα βήματα
 - [ ] Καμία state-changing ενέργεια χωρίς approval
 - [ ] Το resume μετά από restart δουλεύει, χωρίς διπλή εκτέλεση
 - [ ] Citations με πηγή και effective date

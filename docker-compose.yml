@@ -40,6 +40,39 @@ services:
     networks:
       - helpdesk_network
 
+  # Automated Knowledge Ingestion & Seeding Service (Postgres pgvector + Neo4j)
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: helpdesk_seed
+    command: ["python", "scripts/seed.py"]
+    restart: "no"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-helpdesk}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_secure_password}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/${POSTGRES_DB:-helpdesk}
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-neo4j_secure_password}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./src/data:/app/data:ro
+      - ./scripts:/app/scripts:ro
+    networks:
+      - helpdesk_network
+
   # HelpDesk Lite Application (Chainlit + LangGraph)
   app:
     build:
@@ -58,6 +91,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-helpdesk}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_secure_password}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/${POSTGRES_DB:-helpdesk}
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=${NEO4J_USER:-neo4j}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:-neo4j_secure_password}
@@ -67,9 +101,12 @@ services:
         condition: service_healthy
       neo4j:
         condition: service_healthy
+      seed:
+        condition: service_completed_successfully
     volumes:
       - ./src:/app/src:ro
       - ./src/data:/app/data:ro
+      - ./scripts:/app/scripts:ro
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:8000/ || exit 1" ]
       interval: 10s

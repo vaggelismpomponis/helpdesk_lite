@@ -43,6 +43,7 @@ Status: `Proposed` (προτάθηκε) · `Decided` (συμφωνήθηκε) ·
 | 2026-11-17 | Platform | PostgreSQL Schema Init & Upgrade Migration: Ενεργοποίηση `pgvector` extension, πίνακας `tickets` για state-changing ticketing, πίνακας `audit_log` για idempotency tracking και audit trail, πίνακας `policy_chunks` με HNSW index (`embedding vector(1536)`) για το Knowledge retrieval, επίσημοι πίνακες LangGraph `PostgresSaver` (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`) για state persistence και seamless resume μετά από container restart, και non-destructive upgrade migration (`001_upgrade_schema.sql`) με safe column addition και data backfill για υφιστάμενα Docker volumes. | Υλοποίηση Issue #5, αποτροπή duplicate executions (idempotency guard), ασφαλής αναβάθμιση υφιστάμενων compose volumes χωρίς απώλεια δεδομένων, και πλήρης ετοιμότητα βάσης για Workflow και Knowledge roles. | Issue #5, [`docker/postgres/init.sql`](../docker/postgres/init.sql), [`docker/postgres/migrations/001_upgrade_schema.sql`](../docker/postgres/migrations/001_upgrade_schema.sql) |
 | 2026-11-17 | Platform | Multi-stage Dockerfile (python:3.11-slim) για το Chainlit app, integration στο docker-compose.yml με helpdesk_network, healthchecks και volume mounts, starter src/app.py με session mapping (thread_id), και επαληθευμένες οδηγίες εκκίνησης στο README.md. Handoff και συμφωνία με Interface role (✋). | Ολοκλήρωση Phase 2 (Steps 7–8) του Platform role, εξασφάλιση one-command startup (docker compose up) σε <10′. | Issue #6, PR #68 |
 | 2026-11-18 | Platform | Day 5 Milestone Clean-Clone Test & Startup Benchmark (<10′): Επιτυχής εκτέλεση clean clone μόνο με το README σε ≥3 laptops (Windows 11, macOS M2, Ubuntu 22.04 LTS) με μέσο χρόνο εκκίνησης ~2–3′ (<10′). Προσθήκη `.gitattributes` για LF line endings, διασταυρούμενες οδηγίες cp/Copy-Item/copy στο README.md, παραμετροποίηση ports Neo4j στο docker-compose.yml και οδηγίες αντιμετώπισης προβλημάτων (troubleshooting). ✋ Συντονισμός με Quality (@VickyMil-ai). | Επίτευξη του κρίσιμου milestone τέλους 1ης εβδομάδας, απρόσκοπτη εκκίνηση του stack από όλα τα μέλη της ομάδας χωρίς friction. | Issue #7, [CLEAN_CLONE_BENCHMARK.md](./CLEAN_CLONE_BENCHMARK.md) |
+| 2026-11-18 | Platform | Days 6–10 Completion: Automated Ingestion & Seeding in Compose. Προσθήκη service 'seed' στο docker-compose.yml και unified script 'scripts/seed.py' με αυτόματη εκτέλεση και dependency 'service_completed_successfully' πριν το 'app'. Εξασφάλιση πλήρους idempotency (DELETE per version στο pgvector, MERGE στο Neo4j), ευθυγράμμιση schema policy_chunks και εκμηδένιση χειροκίνητων βημάτων. ✋ Συνεργασία με Knowledge (@stef-fot). | Πλήρωση του Definition of Done: τα ingestion και seeding scripts τρέχουν αυτόματα χωρίς χειροκίνητη παρέμβαση, διασφαλίζοντας έτοιμες βάσεις δεδομένων αμέσως μετά το 'docker compose up'. | Issue #8, [roles/platform.md](./roles/platform.md), [roles/knowledge.md](./roles/knowledge.md) |
 
 ## Team Sign-off (PostgreSQL Database Schema Init – Issue #5)
 
@@ -76,6 +77,13 @@ Status: `Proposed` (προτάθηκε) · `Decided` (συμφωνήθηκε) ·
 | **Platform** | @vaggelismpomponis (Primary) | Clean clone fixes, `.gitattributes`, cross-platform copy, benchmark docs | **Signed-off** | 2026-11-18 |
 | **Quality** | @VickyMil-ai | Συντονισμός clean-clone test σε ≥3 laptops, χρόνος <10′, έλεγχος checklist | **Signed-off** | 2026-11-18 |
 | **Interface** | @AlexZarkalis | Επαλήθευση σε macOS περιβάλλον & διαθεσιμότητα UI (port 8000) | **Signed-off** | 2026-11-18 |
+
+## Team Sign-off (Automated Ingestion & Seeding in Compose ✋)
+
+| Ρόλος | Εκπρόσωπος | Πεδίο Συμφωνίας | Status | Ημερομηνία |
+|---|---|---|---|---|
+| **Platform** | @vaggelismpomponis (Primary) | `seed` service στο compose, `scripts/seed.py`, `DATABASE_URL`, schema alignment | **Signed-off** | 2026-11-18 |
+| **Knowledge** | @stef-fot | `ingest.py`, `seed_graph.py`, idempotent DDL & Cypher, tools integration | **Signed-off** | 2026-11-18 |
 
 ## Log προόδου και προβλημάτων (προαιρετικό)
 

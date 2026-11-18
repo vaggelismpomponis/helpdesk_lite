@@ -105,6 +105,36 @@ def test_chainlit_starter_app_contracts():
     assert "cl.context.session.id" in content
 
 
+def test_docker_compose_seed_service_defined():
+    """Verify automated seed service and app dependency in docker-compose.yml."""
+    compose_file = REPO_ROOT / "docker-compose.yml"
+    assert compose_file.exists(), "docker-compose.yml must exist"
+
+    data = yaml.safe_load(compose_file.read_text())
+    services = data.get("services", {})
+    assert "seed" in services, "seed service must be defined in compose"
+
+    seed_service = services["seed"]
+    assert seed_service.get("container_name") == "helpdesk_seed"
+    assert "scripts/seed.py" in " ".join(seed_service.get("command", []))
+    assert seed_service.get("restart") == "no"
+
+    app_depends = services["app"].get("depends_on", {})
+    assert "seed" in app_depends, "app service must depend on seed service"
+    assert app_depends["seed"]["condition"] == "service_completed_successfully"
+
+
+def test_seed_script_structure_and_contracts():
+    """Verify scripts/seed.py coordinates knowledge ingestion and neo4j seeding."""
+    seed_script = REPO_ROOT / "scripts" / "seed.py"
+    assert seed_script.exists(), "scripts/seed.py must exist"
+
+    content = seed_script.read_text(encoding="utf-8")
+    assert "ingest" in content
+    assert "seed" in content
+    assert "wait_for_services" in content
+
+
 def test_gitattributes_enforces_lf():
     """Verify .gitattributes exists and enforces LF line endings for cross-platform stability."""
     gitattributes = REPO_ROOT / ".gitattributes"
