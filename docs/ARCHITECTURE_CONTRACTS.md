@@ -73,13 +73,25 @@ class ExtractedFields(BaseModel):
     application: Optional[str] = Field(default=None, description="Name of the affected application or system")
     symptom: Optional[str] = Field(default=None, description="Observed symptom or error description")
     urgency: Optional[str] = Field(default=None, description="Urgency level (e.g. low, medium, high)")
+    office: Optional[str] = Field(default=None, description="Office the employee works from (e.g. Athens)")
+    device: Optional[str] = Field(default=None, description="Device the employee uses (e.g. MacBook Pro)")
+
+    def missing_fields(self) -> List[str]:
+        """Mandatory triage fields that are missing."""
+        required = ("employee", "symptom", "office", "device")
+        return [name for name in required if not getattr(self, name)]
 
     def is_complete(self) -> bool:
         """Returns True only when all mandatory triage fields are present."""
-        return all([self.employee, self.application, self.symptom])
+        return len(self.missing_fields()) == 0
 ```
 
 *Contract Rule:* If `is_complete()` is `False`, the agent **must not guess**. It must transition to `ask_clarification` to prompt the user.
+
+*Contract Rule (Office & Device):* For incident requests, `office` and `device` are mandatory and come from the user's
+message only, never from the employee record, because POL-001 v2 requires them to be confirmed before acting.
+`application` is optional: it drives the outage check when named, but requests such as a new software license do not
+concern a known application. Pure policy questions skip the triage check.
 
 ### 2.4 Policy Search Contract (`PolicyResult`)
 
@@ -225,6 +237,9 @@ def check_graph(application: str) -> GraphResult:
 | Policy mandates password/credential reset | `ActionType.RESET_CREDENTIALS` | **Yes** | `human_approval` (Interrupt) |
 | Standard issue requiring investigation | `ActionType.OPEN_TICKET` | **Yes** | `human_approval` (Interrupt) |
 | Critical incident or VIP employee | `ActionType.ESCALATE` | **Yes** | `human_approval` (Interrupt) |
+
+*Citation Rule:* Every action cites a policy. When the request matches no policy, the policy that governs the chosen
+action is cited instead: `LINK_OUTAGE` → POL-003, `OPEN_TICKET` → POL-004, `ESCALATE` → POL-005.
 
 ---
 
