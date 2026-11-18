@@ -11,13 +11,24 @@ DIM = int(os.getenv("EMBEDDING_DIM", "1536"))  # text-embedding-3-small = 1536
 
 
 def pg() -> psycopg.Connection:
-    return psycopg.connect(os.environ["DATABASE_URL"])
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        host = os.getenv("POSTGRES_HOST", "localhost")
+        port = os.getenv("POSTGRES_PORT", "5432")
+        user = os.getenv("POSTGRES_USER", "postgres")
+        pw = os.getenv("POSTGRES_PASSWORD", "postgres_secure_password")
+        db = os.getenv("POSTGRES_DB", "helpdesk")
+        url = f"postgresql://{user}:{pw}@{host}:{port}/{db}"
+    return psycopg.connect(url)
 
 
 def neo4j_driver() -> Driver:
     return GraphDatabase.driver(
         os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-        auth=(os.getenv("NEO4J_USER", "neo4j"), os.environ["NEO4J_PASSWORD"]),
+        auth=(
+            os.getenv("NEO4J_USER", "neo4j"),
+            os.getenv("NEO4J_PASSWORD", "neo4j_secure_password"),
+        ),
     )
 
 
