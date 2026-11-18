@@ -40,8 +40,16 @@ class TestPostgresSchemaInit(unittest.TestCase):
             "Postgres initialization must enable pgvector extension (CREATE EXTENSION IF NOT EXISTS vector)",
         )
 
+    def _extract_table_body(self, table_name: str) -> str:
+        """Extract the parenthesized body of a CREATE TABLE statement to scope column assertions."""
+        pattern = rf"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+{table_name}\s*\((.*?)\);"
+        match = re.search(pattern, self.sql_content, re.DOTALL | re.IGNORECASE)
+        self.assertIsNotNone(match, f"Table declaration for '{table_name}' not found in SQL")
+        return match.group(1)
+
     def test_tickets_table_and_columns(self):
         self.assertIn("CREATE TABLE IF NOT EXISTS tickets", self.sql_content)
+        table_body = self._extract_table_body("tickets")
         expected_columns = [
             "id",
             "action_id",
@@ -56,13 +64,14 @@ class TestPostgresSchemaInit(unittest.TestCase):
         ]
         for col in expected_columns:
             self.assertRegex(
-                self.sql_content,
-                rf"\b{col}\b",
-                f"tickets table missing column '{col}'",
+                table_body,
+                rf"\b{col}\s+[A-Za-z0-9_]+",
+                f"tickets table missing column declaration '{col}'",
             )
 
     def test_audit_log_table_and_columns(self):
         self.assertIn("CREATE TABLE IF NOT EXISTS audit_log", self.sql_content)
+        table_body = self._extract_table_body("audit_log")
         expected_columns = [
             "id",
             "action_id",
@@ -76,9 +85,9 @@ class TestPostgresSchemaInit(unittest.TestCase):
         ]
         for col in expected_columns:
             self.assertRegex(
-                self.sql_content,
-                rf"\b{col}\b",
-                f"audit_log table missing column '{col}'",
+                table_body,
+                rf"\b{col}\s+[A-Za-z0-9_]+",
+                f"audit_log table missing column declaration '{col}'",
             )
 
     def test_langgraph_checkpoints_tables(self):
@@ -96,23 +105,25 @@ class TestPostgresSchemaInit(unittest.TestCase):
             )
 
     def test_langgraph_checkpoints_columns(self):
-        # checkpoints table core columns
+        # checkpoints table core columns scoped to checkpoints table body
+        table_body = self._extract_table_body("checkpoints")
         for col in ["thread_id", "checkpoint_ns", "checkpoint_id", "checkpoint", "metadata"]:
             self.assertRegex(
-                self.sql_content,
-                rf"\b{col}\b",
-                f"checkpoints table missing column '{col}'",
+                table_body,
+                rf"\b{col}\s+[A-Za-z0-9_]+",
+                f"checkpoints table missing column declaration '{col}'",
             )
 
     def test_policy_chunks_table_and_columns(self):
         self.assertIn("CREATE TABLE IF NOT EXISTS policy_chunks", self.sql_content)
+        table_body = self._extract_table_body("policy_chunks")
         for col in ["doc_id", "title", "effective_date", "source", "content", "chunk_index", "embedding"]:
             self.assertRegex(
-                self.sql_content,
-                rf"\b{col}\b",
-                f"policy_chunks table missing column '{col}'",
+                table_body,
+                rf"\b{col}\s+[A-Za-z0-9_]+",
+                f"policy_chunks table missing column declaration '{col}'",
             )
-        self.assertIn("vector(1536)", self.sql_content)
+        self.assertIn("vector(1536)", table_body)
 
     def test_indexes_defined(self):
         expected_indexes = [
