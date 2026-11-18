@@ -20,10 +20,10 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 
 ## 2. Walking skeleton (Ημ. 2–4)
 
-- [ ] Docker Compose: Postgres + pgvector, Neo4j
-- [ ] `.env.example` και `.env` εκτός version control
-- [ ] Graph με mock nodes
-- [ ] Βασικό Chainlit UI με mock graph
+- [x] Docker Compose: Postgres + pgvector, Neo4j
+- [x] `.env.example` και `.env` εκτός version control
+- [x] Graph με mock nodes
+- [x] Βασικό Chainlit UI με mock graph
 - [ ] Dataset policies (παλιές/νέες εκδόσεις) και graph model
 - [ ] LangSmith project και πρώτο σχέδιο 10 requests
 

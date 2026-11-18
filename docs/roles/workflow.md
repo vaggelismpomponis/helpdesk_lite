@@ -32,17 +32,17 @@
 
 ## Role checklist
 
-- [ ] State, models και 5 action types συμφωνημένα και καταγεγραμμένα
-- [ ] Υπογραφές tools συμφωνημένες με Knowledge
-- [ ] Γράφος με mock nodes και conditional edges
-- [ ] `extract_fields` με optional πεδία και κανόνα «ρώτα όταν λείπει»
-- [ ] Interrupt για clarification
-- [ ] Interrupt για approval
-- [ ] PostgresSaver συνδεδεμένο
+- [x] State, models και 5 action types συμφωνημένα και καταγεγραμμένα
+- [x] Υπογραφές tools συμφωνημένες με Knowledge
+- [x] Γράφος με mock nodes και conditional edges
+- [x] `extract_fields` με optional πεδία και κανόνα «ρώτα όταν λείπει»
+- [x] Interrupt για clarification
+- [x] Interrupt για approval
+- [x] PostgresSaver συνδεδεμένο
 - [ ] Mocks αντικαταστάθηκαν με πραγματικά tools
-- [ ] Outage → *link to outage*
-- [ ] Idempotent `execute_action` (`action_id` + status)
-- [ ] Restart test χωρίς διπλή εκτέλεση
+- [x] Outage → *link to outage*
+- [x] Idempotent `execute_action` (`action_id` + status)
+- [x] Restart test χωρίς διπλή εκτέλεση
 - [ ] Tracing metadata στο LangSmith
 - [ ] Έχω commits και τουλάχιστον ένα review σε PR άλλου ρόλου
 - [ ] Μπορώ να εξηγήσω ολόκληρη τη ροή
