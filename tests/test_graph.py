@@ -63,6 +63,85 @@ def test_unknown_sender_is_asked_who_they_are(graph):
     assert "who you are" in result["clarification_question"]
 
 
+def test_extract_fields_missing_application_identifies_and_asks(graph):
+    """Ensure missing application is accurately identified, never guessed, and pauses for clarification."""
+    config = new_config()
+    result = start(graph, config, "I am unable to login and my password expired")
+    assert pending(graph, config) == "clarification"
+    fields = result["extracted_fields"]
+    assert fields.application is None
+    assert "application" in fields.missing_fields()
+    assert not fields.is_complete()
+    assert fields.has_missing_fields
+    assert "application or system" in result["clarification_question"]
+
+
+def test_extract_fields_missing_employee_identifies_and_asks(graph):
+    """Ensure missing employee identity is accurately identified, never guessed, and pauses for clarification."""
+    config = new_config(email=None)
+    result = start(graph, config, "The ERP System report export fails with error 500")
+    assert pending(graph, config) == "clarification"
+    fields = result["extracted_fields"]
+    assert fields.employee is None
+    assert "employee" in fields.missing_fields()
+    assert not fields.is_complete()
+    assert "who you are" in result["clarification_question"]
+
+
+def test_extract_fields_missing_symptom_identifies_and_asks(graph):
+    """Ensure intro/app without an observed symptom is accurately identified and prompts for the symptom."""
+    config = new_config(email=None)
+    result = start(graph, config, "Hello, I am Maria Papadopoulou on ERP System")
+    assert pending(graph, config) == "clarification"
+    fields = result["extracted_fields"]
+    assert fields.employee == "Maria Papadopoulou"
+    assert fields.application == "ERP System"
+    assert fields.symptom is None
+    assert fields.missing_fields() == ["symptom"]
+    assert not fields.is_complete()
+    assert "what is happening" in result["clarification_question"]
+
+    # Replying with the symptom completes the fields and advances the graph
+    result = reply(graph, config, "The application throws a 500 Internal Server Error when saving")
+    assert result["extracted_fields"].is_complete()
+    assert pending(graph, config) == "approval"
+
+
+def test_extract_fields_multiple_missing_fields_asks_all(graph):
+    """Ensure multiple missing fields are all detected and included in the clarification prompt."""
+    config = new_config(email=None)
+    result = start(graph, config, "Please help, I have an issue with error code 500")
+    assert pending(graph, config) == "clarification"
+    fields = result["extracted_fields"]
+    assert "employee" in fields.missing_fields()
+    assert "application" in fields.missing_fields()
+    assert not fields.is_complete()
+    assert "who you are" in result["clarification_question"]
+    assert "application or system" in result["clarification_question"]
+
+
+def test_extract_fields_employee_from_message_text(graph):
+    """Ensure employee name mentioned in message text is extracted even without session email."""
+    config = new_config(email=None)
+    result = start(graph, config, "I am Maria Papadopoulou and ERP System report export fails")
+    fields = result["extracted_fields"]
+    assert fields.employee == "Maria Papadopoulou"
+    assert fields.application == "ERP System"
+    assert fields.is_complete()
+    assert pending(graph, config) == "approval"
+
+
+def test_extract_fields_urgency_detection(graph):
+    """Ensure urgency is extracted as high when critical/urgent keywords appear, else None."""
+    config = new_config()
+    urgent_result = start(graph, config, "URGENT: ERP System is completely down with error 500")
+    assert urgent_result["extracted_fields"].urgency == "high"
+
+    config2 = new_config()
+    normal_result = start(graph, config2, "The ERP System report export has an error")
+    assert normal_result["extracted_fields"].urgency is None
+
+
 def test_approved_action_executes_once(graph):
     config = new_config()
     start(graph, config, "My ERP System password is locked out, please reset it")

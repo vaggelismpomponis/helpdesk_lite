@@ -73,5 +73,16 @@ def check_graph(application: str) -> GraphResult:
     )
 
 
-def find_employee(email: Optional[str]) -> Optional[str]:
-    return next((e["name"] for e in SEED["employees"] if e["email"] == email), None)
+def find_employee(email: Optional[str] = None, text: Optional[str] = None) -> Optional[str]:
+    if email:
+        match = next((e["name"] for e in SEED["employees"] if e["email"] == email), None)
+        if match:
+            return match
+    if text:
+        lowered = text.lower()
+        for emp in SEED["employees"]:
+            email_match = emp["email"].lower()
+            name_match = emp["name"].lower()
+            if email_match in lowered or re.search(rf"\b{re.escape(name_match)}\b", lowered):
+                return emp["name"]
+    return None

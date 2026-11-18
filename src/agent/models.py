@@ -30,9 +30,24 @@ class ExtractedFields(BaseModel):
     symptom: Optional[str] = Field(default=None, description="Observed symptom or error description")
     urgency: Optional[str] = Field(default=None, description="Urgency level (e.g. low, medium, high)")
 
+    def missing_fields(self) -> List[str]:
+        """Returns the list of mandatory triage fields that are missing."""
+        missing: List[str] = []
+        if not self.employee:
+            missing.append("employee")
+        if not self.application:
+            missing.append("application")
+        if not self.symptom:
+            missing.append("symptom")
+        return missing
+
     def is_complete(self) -> bool:
         """Returns True only when all mandatory triage fields are present."""
-        return all([self.employee, self.application, self.symptom])
+        return len(self.missing_fields()) == 0
+
+    @property
+    def has_missing_fields(self) -> bool:
+        return not self.is_complete()
 
 
 class PolicyResult(BaseModel):

@@ -3,6 +3,7 @@
 extract_fields and decide_action use mock rules for now; the LLM and the real tools come later.
 """
 
+import re
 import uuid
 
 from langchain_core.runnables import RunnableConfig
@@ -26,6 +27,22 @@ FIELD_PROMPTS = {
     "symptom": "what is happening (the error or symptom)",
 }
 
+SYMPTOM_INDICATORS = (
+    "error", "fail", "stuck", "broken", "crash", "down", "slow", "locked",
+    "lockout", "freeze", "reset", "credential", "password", "access",
+    "license", "install", "connect", "lost", "help", "export", "outbox",
+    "500", "403", "404", "cannot", "can't", "unable", "won't", "doesn't work",
+    "issue", "problem", "bug", "trouble", "incident", "offline", "outage"
+)
+
+GREETING_PATTERNS = [
+    r"\b(?:hello|hi|hey|good\s+(?:morning|afternoon|evening))\b",
+    r"\bmy\s+name\s+is\b",
+    r"\bi\s+am\b",
+    r"\bi'm\b",
+    r"\bthis\s+is\b",
+]
+
 # Stand-in for the Postgres action table until step 10 (idempotent execution).
 EXECUTED_ACTION_IDS: set[str] = set()
 
@@ -39,21 +56,72 @@ def is_question(text: str) -> bool:
     return bool(words) and words[0].lower().strip("¿") in QUESTION_WORDS and text.rstrip().endswith("?")
 
 
+def _extract_symptom(text: str, application: str | None = None, employee: str | None = None) -> str | None:
+    """Extract observed symptom or error description without guessing or hallucinating."""
+    raw = text.strip()
+    if not raw:
+        return None
+    lowered = raw.lower()
+    if any(re.search(rf"\b{re.escape(kw)}\b", lowered) for kw in SYMPTOM_INDICATORS):
+        return raw
+
+    # Check if text only contains identity/greetings and application without describing a symptom
+    cleaned = lowered
+    for pat in GREETING_PATTERNS:
+        cleaned = re.sub(pat, " ", cleaned)
+    if employee:
+        cleaned = re.sub(rf"\b{re.escape(employee.lower())}\b", " ", cleaned)
+    if application:
+        cleaned = re.sub(rf"\b{re.escape(application.lower())}\b", " ", cleaned)
+
+    cleaned_words = [
+        w for w in re.findall(r"\b[a-z0-9]+\b", cleaned)
+        if w not in ("on", "in", "from", "at", "the", "a", "an", "for", "with", "to", "and", "system", "app")
+    ]
+    if len(cleaned_words) < 3:
+        return None
+    return raw
+
+
 def extract_fields(state: AgentState, config: RunnableConfig) -> dict:
+    """Extract fields using Pydantic schema and enforce 'ask if missing' rule."""
     text = _user_text(state)
     lowered = text.lower()
-    # The sender comes from the Chainlit session, passed in config["configurable"]["user_email"].
-    employee = mocks.find_employee(config.get("configurable", {}).get("user_email"))
+
+    # 1. Resolve employee: session config takes precedence, fallback to message text
+    user_email = config.get("configurable", {}).get("user_email")
+    employee = mocks.find_employee(email=user_email, text=text)
+
+    # 2. Resolve application: match against known applications and aliases
+    application = mocks.find_application(text)
+
+    # 3. Resolve symptom: extract observed issue without guessing
+    symptom = _extract_symptom(text, application=application, employee=employee)
+
+    # 4. Resolve urgency: optional triage field
+    urgency = "high" if any(w in lowered for w in ("urgent", "asap", "critical", "emergency", "production down")) else None
+
+    # Construct Pydantic model with optional fields
     fields = ExtractedFields(
         employee=employee,
-        application=mocks.find_application(text),
-        symptom=text.strip() or None,
-        urgency="high" if any(w in lowered for w in ("urgent", "asap", "critical")) else None,
+        application=application,
+        symptom=symptom,
+        urgency=urgency,
     )
-    # Policy questions do not need triage fields; only incident requests are checked.
-    missing = [] if is_question(text) else [f for f in FIELD_PROMPTS if not getattr(fields, f)]
+
+    # 5. Enforce strict "Ask if Missing" rule:
+    # Policy questions do not need triage fields; incident requests require all mandatory fields.
+    if is_question(text):
+        missing = []
+    else:
+        missing = fields.missing_fields()
+
     question = f"To help you, please tell me {' and '.join(FIELD_PROMPTS[f] for f in missing)}." if missing else None
-    return {"extracted_fields": fields, "needs_clarification": bool(missing), "clarification_question": question}
+    return {
+        "extracted_fields": fields,
+        "needs_clarification": bool(missing),
+        "clarification_question": question,
+    }
 
 
 def ask_clarification(state: AgentState) -> dict:
