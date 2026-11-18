@@ -45,13 +45,17 @@ git clone https://github.com/vaggelismpomponis/helpdesk_lite.git
 cd helpdesk_lite
 
 # 2. Environment file creation
-# Platform-specific copy command from template
-cp .env.example .env            # Linux / macOS
-Copy-Item .env.example .env     # Windows PowerShell
-copy .env.example .env          # Windows CMD
+# Linux / macOS:
+cp .env.example .env
 
-# 3. Stack startup & build
-docker compose up -d --build
+# Windows (PowerShell):
+Copy-Item .env.example .env
+
+# Windows (CMD):
+copy .env.example .env
+
+# 3. Stack startup & build (wait until all service healthchecks report healthy)
+docker compose up -d --build --wait
 
 # 4. Healthcheck verification
 docker compose ps
@@ -89,12 +93,12 @@ During multi-platform testing, four specific friction points were identified, do
 - **Resolution:** Added a root [`.gitattributes`](../.gitattributes) enforcing `* text=auto eol=lf` across all SQL, Python, shell, YAML, and configuration files regardless of host operating system.
 
 ### Friction Point 2: Windows Command Prompt Environment Copy Command
-- **Issue:** `README.md` previously instructed only `cp .env.example .env`. In standard Windows `cmd.exe`, `cp` is not recognized, resulting in `'cp' is not recognized as an internal or external command`.
-- **Resolution:** Updated [`README.md`](../README.md) Quick Start with platform-specific instructions for Linux/macOS (`cp`), Windows PowerShell (`Copy-Item`), and Windows CMD (`copy`).
+- **Issue:** `README.md` previously instructed only `cp .env.example .env`. In standard Windows `cmd.exe`, `cp` is not recognized. In addition, `cmd.exe` does not recognize Bash-style `#` inline comments (e.g. `copy .env.example .env # Windows CMD`), treating `# Windows CMD` as additional file arguments and causing `copy` to fail.
+- **Resolution:** Formatted platform-specific commands on separate, uncommented lines in [`README.md`](../README.md) and protocol docs with platform headers outside the command: Linux/macOS (`cp`), Windows PowerShell (`Copy-Item`), and Windows CMD (`copy .env.example .env`).
 
-### Friction Point 3: Neo4j Host Port Allocations
-- **Issue:** `docker-compose.yml` had fixed port mappings (`7474:7474` and `7687:7687`). When a developer already had Neo4j or another service running on the host, startup failed with port binding conflicts.
-- **Resolution:** Parameterized Neo4j port bindings in [`docker-compose.yml`](../docker-compose.yml) as `${NEO4J_HTTP_PORT:-7474}:7474` and `${NEO4J_BOLT_PORT:-7687}:7687`, and added corresponding variables to [`.env.example`](../.env.example). Documented override instructions in `README.md`.
+### Friction Point 3: Neo4j Host Port Allocations & Advertised Bolt Address
+- **Issue:** `docker-compose.yml` had fixed port mappings (`7474:7474` and `7687:7687`). When a developer had Neo4j or another service running on the host, startup failed with port binding conflicts. Furthermore, overriding the published host Bolt port (e.g. `NEO4J_BOLT_PORT=7688`) caused Neo4j Browser to continue advertising `:7687`, causing web browser connection failures.
+- **Resolution:** Parameterized Neo4j port bindings in [`docker-compose.yml`](../docker-compose.yml) as `${NEO4J_HTTP_PORT:-7474}:7474` and `${NEO4J_BOLT_PORT:-7687}:7687`, and added `NEO4J_server_bolt_advertised__address: ":${NEO4J_BOLT_PORT:-7687}"` so that the advertised Bolt endpoint always matches the published host port. Added corresponding variables to [`.env.example`](../.env.example) and documented override instructions in `README.md`.
 
 ### Friction Point 4: Linux Docker Daemon Socket Permissions
 - **Issue:** On clean Ubuntu Linux installations, non-root users executing `docker compose up` encountered `permission denied while trying to connect to the Docker daemon socket`.

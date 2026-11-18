@@ -161,6 +161,7 @@ def test_cross_platform_compose_ports_configurable():
     assert "APP_PORT" in content
     assert "NEO4J_HTTP_PORT" in content
     assert "NEO4J_BOLT_PORT" in content
+    assert "NEO4J_server_bolt_advertised__address" in content
 
 
 def test_env_example_contains_all_service_ports():
