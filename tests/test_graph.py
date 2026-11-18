@@ -21,7 +21,6 @@ from src.db.connection import get_pooled_connection, is_postgres_available
 
 MARIA = "maria.papadopoulou@nimbus.com"  # Finance, Athens
 EMP02 = "employee02@nimbus.com"
-EMP40 = "employee40@nimbus.com"  # no team assigned in graph_seed.json
 # Office and device complete an incident request (POL-001: confirm them before acting).
 AT_DESK = " I work from the Athens office on my MacBook Pro."
 
@@ -160,23 +159,21 @@ def test_extract_fields_missing_office_and_device_identifies_and_asks(graph):
 
 
 def test_application_is_optional(graph):
-    """A request about something that is not a known application (a new license) is still complete."""
+    """A request that names no known application is still complete and gets a ticket."""
     config = new_config()
-    result = start(graph, config, "I need a Docker Desktop license installed." + AT_DESK)
+    result = start(graph, config, "My second monitor stopped working this morning." + AT_DESK)
     assert result["extracted_fields"].application is None
     assert result["extracted_fields"].is_complete()
     assert pending(graph, config) == "approval"
     assert result["action_proposal"].action_type == ActionType.OPEN_TICKET
+    assert result["policy_result"].doc_id == "POL-004"  # governing policy of open_ticket
+
+
+def test_license_request_cites_ticket_policy(graph):
+    config = new_config()
+    result = start(graph, config, "I need a Docker Desktop license installed." + AT_DESK)
+    assert result["action_proposal"].action_type == ActionType.OPEN_TICKET
     assert result["policy_result"].doc_id == "POL-004"
-
-
-def test_employee_without_team_is_escalated(graph):
-    config = new_config(EMP40)
-    result = start(graph, config, "I cannot open the shared team folders." + AT_DESK)
-    assert pending(graph, config) == "approval"
-    proposal = result["action_proposal"]
-    assert proposal.action_type == ActionType.ESCALATE
-    assert proposal.requires_approval
 
 
 def test_outage_without_matching_policy_cites_outage_policy(graph):

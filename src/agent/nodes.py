@@ -165,8 +165,6 @@ def _choose_action(state: AgentState) -> tuple[ActionType, str]:
         return ActionType.LINK_OUTAGE, f"Active outage on {', '.join(state.graph_result.active_outages)}"
     if state.policy_result and is_question(_user_text(state)):
         return ActionType.ANSWER_POLICY, f"Policy {state.policy_result.doc_id} answers the question"
-    if mocks.has_no_team(state.extracted_fields.employee):
-        return ActionType.ESCALATE, "Employee has no team assigned, so an engineer must handle it"
     if any(w in text for w in RESET_WORDS):
         return ActionType.RESET_CREDENTIALS, "Credential reset requested and no outage explains it"
     if any(w in text for w in CRITICAL_WORDS) or "no assigned team" in text or "escalate" in text:

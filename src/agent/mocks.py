@@ -83,12 +83,6 @@ def find_device(text: str) -> Optional[str]:
     return _find_known(DEVICES, text)
 
 
-def has_no_team(employee: Optional[str]) -> bool:
-    """True when a known employee has no team assigned (no owner to route the request to)."""
-    record = next((e for e in SEED["employees"] if e["name"] == employee), None)
-    return record is not None and not record.get("team_id")
-
-
 def find_application(text: str) -> Optional[str]:
     """Canonical application name mentioned in the text (mock of entity linking)."""
     lowered = text.lower()

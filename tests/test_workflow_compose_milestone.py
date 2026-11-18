@@ -38,6 +38,8 @@ from src.db.connection import get_pooled_connection, is_postgres_available
 
 MARIA = "maria.papadopoulou@nimbus.com"
 EMP02 = "employee02@nimbus.com"
+# Office and device complete an incident request (POL-001: confirm them before acting).
+AT_DESK = " I work from the Athens office on my MacBook Pro."
 
 requires_postgres = pytest.mark.skipif(
     not is_postgres_available(),
@@ -124,14 +126,14 @@ def test_path_clarification_to_approved_execution():
     graph = get_production_graph()
     config = new_config()
 
-    # Incomplete request (missing application)
+    # Incomplete request (missing office and device)
     start(graph, config, "Please reset my credentials")
     assert pending(graph, config) == "clarification"
     snapshot = graph.get_state(config)
     assert snapshot.values["needs_clarification"] is True
 
-    # User supplies missing application
-    reply(graph, config, "It is for ERP System")
+    # User supplies the application, office and device
+    reply(graph, config, "It is for ERP System." + AT_DESK)
     assert pending(graph, config) == "approval"
     proposal = graph.get_state(config).values["action_proposal"]
     assert proposal.action_type == ActionType.RESET_CREDENTIALS
@@ -153,7 +155,7 @@ def test_path_clarification_to_rejected_execution():
     start(graph, config, "Please reset my password")
     assert pending(graph, config) == "clarification"
 
-    reply(graph, config, "The system is ERP System")
+    reply(graph, config, "The system is ERP System." + AT_DESK)
     assert pending(graph, config) == "approval"
 
     # Operator rejects
@@ -169,7 +171,7 @@ def test_path_direct_state_changing_approved():
     graph = get_production_graph()
     config = new_config()
 
-    start(graph, config, "My ERP System password is locked out, please reset it")
+    start(graph, config, "My ERP System password is locked out, please reset it" + AT_DESK)
     assert pending(graph, config) == "approval"
 
     result = decide(graph, config, approved=True)
@@ -183,7 +185,7 @@ def test_path_direct_state_changing_rejected():
     graph = get_production_graph()
     config = new_config()
 
-    start(graph, config, "The ERP System export fails with error 500")
+    start(graph, config, "The ERP System export fails with error 500" + AT_DESK)
     assert pending(graph, config) == "approval"
 
     result = decide(graph, config, approved=False)
@@ -212,7 +214,7 @@ def test_path_outage_detection_bypasses_approval():
     graph = get_production_graph()
     config = new_config()
 
-    result = start(graph, config, "I can't connect to the VPN, please reset my password")
+    result = start(graph, config, "I can't connect to the VPN, please reset my password" + AT_DESK)
     assert pending(graph, config) is None
     proposal = result["action_proposal"]
     assert proposal.action_type == ActionType.LINK_OUTAGE
@@ -226,7 +228,7 @@ def test_path_critical_incident_escalation():
     graph = get_production_graph()
     config = new_config()
 
-    start(graph, config, "CRITICAL: ERP System production down and data breach risk")
+    start(graph, config, "CRITICAL: ERP System production down and data breach risk" + AT_DESK)
     assert pending(graph, config) == "approval"
     proposal = graph.get_state(config).values["action_proposal"]
     assert proposal.action_type == ActionType.ESCALATE
@@ -279,7 +281,7 @@ def test_milestone_postgres_checkpoint_persistence_across_restarts():
     assert pending(graph_v1, cfg_1) == "clarification"
 
     # Thread 2 stops at approval
-    start(graph_v1, cfg_2, "My ERP System password is locked out, please reset it")
+    start(graph_v1, cfg_2, "My ERP System password is locked out, please reset it" + AT_DESK)
     assert pending(graph_v1, cfg_2) == "approval"
 
     # Directly check PostgreSQL checkpoints table
@@ -298,7 +300,7 @@ def test_milestone_postgres_checkpoint_persistence_across_restarts():
 
     # Thread 1 resumes from checkpoint
     assert pending(graph_v2, cfg_1) == "clarification"
-    res_1 = reply(graph_v2, cfg_1, "The system is ERP System")
+    res_1 = reply(graph_v2, cfg_1, "The system is ERP System." + AT_DESK)
     assert pending(graph_v2, cfg_1) == "approval"
 
     # Thread 2 resumes from checkpoint

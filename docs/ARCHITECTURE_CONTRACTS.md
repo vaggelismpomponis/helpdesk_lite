@@ -234,7 +234,6 @@ def check_graph(application: str) -> GraphResult:
 | `not extracted_fields.is_complete()` | Clarification prompt | No | `ask_clarification` (Interrupt) |
 | `graph_result.has_active_outage == True` | `ActionType.LINK_OUTAGE` | No | `final_response` |
 | Known policy matches query | `ActionType.ANSWER_POLICY` | No | `final_response` |
-| Employee has no team assigned | `ActionType.ESCALATE` | **Yes** | `human_approval` (Interrupt) |
 | Policy mandates password/credential reset | `ActionType.RESET_CREDENTIALS` | **Yes** | `human_approval` (Interrupt) |
 | Standard issue requiring investigation | `ActionType.OPEN_TICKET` | **Yes** | `human_approval` (Interrupt) |
 | Critical incident or VIP employee | `ActionType.ESCALATE` | **Yes** | `human_approval` (Interrupt) |
