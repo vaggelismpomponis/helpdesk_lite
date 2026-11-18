@@ -25,9 +25,19 @@ POLICY_KEYWORDS = [
     ("locked", "POL-001"),
     ("credential", "POL-001"),
     ("vpn", "POL-002"),
+    ("license", "POL-004"),  # a license request is a ticket (POL-004), even when it says "install"
     ("install", "POL-010"),
-    ("license", "POL-004"),
 ]
+
+# Policy that governs an action, cited when the request itself matched no policy.
+POLICY_BY_ACTION = {
+    "link_outage": "POL-003",
+    "open_ticket": "POL-004",
+    "escalate": "POL-005",
+}
+
+OFFICES = sorted({e["office"] for e in SEED["employees"]})
+DEVICES = sorted({e["device"] for e in SEED["employees"]})
 
 
 def _front_matter(path: Path) -> dict[str, str]:
@@ -42,15 +52,41 @@ def _latest_version(doc_id: str) -> Optional[Path]:
     return versions[-1] if versions else None
 
 
-def retrieve_policy(query: str, application: Optional[str] = None) -> Optional[PolicyResult]:
-    text = f"{query} {application or ''}".lower()
-    doc_id = next((d for keyword, d in POLICY_KEYWORDS if keyword in text), None)
-    path = _latest_version(doc_id) if doc_id else None
+def policy_by_id(doc_id: str) -> Optional[PolicyResult]:
+    """Latest version of a policy, looked up by doc_id."""
+    path = _latest_version(doc_id)
     if not path:
         return None
     meta = _front_matter(path)
     body = path.read_text(encoding="utf-8").split("---\n", 2)[-1].strip()
     return PolicyResult(text=body[:800], doc_id=meta["doc_id"], effective_date=meta["effective_date"], source=path.name)
+
+
+def retrieve_policy(query: str, application: Optional[str] = None) -> Optional[PolicyResult]:
+    text = f"{query} {application or ''}".lower()
+    doc_id = next((d for keyword, d in POLICY_KEYWORDS if keyword in text), None)
+    return policy_by_id(doc_id) if doc_id else None
+
+
+def _find_known(options: list[str], text: str) -> Optional[str]:
+    lowered = text.lower()
+    return next((o for o in options if re.search(rf"\b{re.escape(o.lower())}\b", lowered)), None)
+
+
+def find_office(text: str) -> Optional[str]:
+    """Office named in the text. Taken from the message only: the user must confirm it (POL-001)."""
+    return _find_known(OFFICES, text)
+
+
+def find_device(text: str) -> Optional[str]:
+    """Device named in the text. Taken from the message only: the user must confirm it (POL-001)."""
+    return _find_known(DEVICES, text)
+
+
+def has_no_team(employee: Optional[str]) -> bool:
+    """True when a known employee has no team assigned (no owner to route the request to)."""
+    record = next((e for e in SEED["employees"] if e["name"] == employee), None)
+    return record is not None and not record.get("team_id")
 
 
 def find_application(text: str) -> Optional[str]:

@@ -25,8 +25,9 @@ CRITICAL_WORDS = ("critical", "production down", "data breach", "security incide
 CLARIFICATION_QUESTION = "Which application or system is affected?"
 FIELD_PROMPTS = {
     "employee": "who you are (name or work email)",
-    "application": "which application or system is affected",
     "symptom": "what is happening (the error or symptom)",
+    "office": "which office you are working from",
+    "device": "which device you are using",
 }
 
 SYMPTOM_INDICATORS = (
@@ -62,7 +63,9 @@ def is_question(text: str) -> bool:
     return bool(words) and words[0] in QUESTION_WORDS and lowered.endswith("?")
 
 
-def _extract_symptom(text: str, application: str | None = None, employee: str | None = None) -> str | None:
+def _extract_symptom(
+    text: str, application: str | None = None, employee: str | None = None, *context: str | None
+) -> str | None:
     """Extract observed symptom or error description without guessing or hallucinating."""
     raw = text.strip()
     if not raw:
@@ -79,10 +82,16 @@ def _extract_symptom(text: str, application: str | None = None, employee: str | 
         cleaned = re.sub(rf"\b{re.escape(employee.lower())}\b", " ", cleaned)
     if application:
         cleaned = re.sub(rf"\b{re.escape(application.lower())}\b", " ", cleaned)
+    for known in context:  # office and device are context, not a symptom
+        if known:
+            cleaned = re.sub(rf"\b{re.escape(known.lower())}\b", " ", cleaned)
 
     cleaned_words = [
         w for w in re.findall(r"\b[a-z0-9]+\b", cleaned)
-        if w not in ("on", "in", "from", "at", "the", "a", "an", "for", "with", "to", "and", "system", "app")
+        if w not in (
+            "on", "in", "from", "at", "the", "a", "an", "for", "with", "to", "and", "system", "app",
+            "office", "my", "using", "working", "work",
+        )
     ]
     if len(cleaned_words) < 3:
         return None
@@ -101,21 +110,25 @@ def extract_fields(state: AgentState, config: RunnableConfig) -> dict:
     # 2. Resolve application: match against known applications and aliases
     application = mocks.find_application(text)
 
-    # 3. Resolve symptom: extract observed issue without guessing
-    symptom = _extract_symptom(text, application=application, employee=employee)
+    # 3. Resolve office and device: from the message only, the user must confirm them (POL-001)
+    office, device = mocks.find_office(text), mocks.find_device(text)
 
-    # 4. Resolve urgency: optional triage field
+    # 4. Resolve symptom: extract observed issue without guessing
+    symptom = _extract_symptom(text, application, employee, office, device)
+
+    # 5. Resolve urgency: optional triage field
     urgency = "high" if any(w in lowered for w in ("urgent", "asap", "critical", "emergency", "production down")) else None
 
-    # Construct Pydantic model with optional fields
     fields = ExtractedFields(
         employee=employee,
         application=application,
         symptom=symptom,
         urgency=urgency,
+        office=office,
+        device=device,
     )
 
-    # 5. Enforce strict "Ask if Missing" rule:
+    # 6. Enforce strict "Ask if Missing" rule:
     # Policy questions do not need triage fields; incident requests require all mandatory fields.
     if is_question(text):
         missing = []
@@ -152,6 +165,8 @@ def _choose_action(state: AgentState) -> tuple[ActionType, str]:
         return ActionType.LINK_OUTAGE, f"Active outage on {', '.join(state.graph_result.active_outages)}"
     if state.policy_result and is_question(_user_text(state)):
         return ActionType.ANSWER_POLICY, f"Policy {state.policy_result.doc_id} answers the question"
+    if mocks.has_no_team(state.extracted_fields.employee):
+        return ActionType.ESCALATE, "Employee has no team assigned, so an engineer must handle it"
     if any(w in text for w in RESET_WORDS):
         return ActionType.RESET_CREDENTIALS, "Credential reset requested and no outage explains it"
     if any(w in text for w in CRITICAL_WORDS):
@@ -174,7 +189,9 @@ def decide_action(state: AgentState) -> dict:
         requires_approval=needs_approval,
         rationale=rationale,
     )
-    return {"action_proposal": proposal}
+    # No policy matched the request: cite the policy that governs the chosen action instead.
+    policy = state.policy_result or mocks.policy_by_id(mocks.POLICY_BY_ACTION.get(action_type.value, ""))
+    return {"action_proposal": proposal, "policy_result": policy}
 
 
 # langgraph 0.2.45 rejects empty updates, so unchanged nodes return the proposal as is.
