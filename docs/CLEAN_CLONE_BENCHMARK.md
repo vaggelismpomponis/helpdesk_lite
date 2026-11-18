@@ -113,3 +113,59 @@ During multi-platform testing, four specific friction points were identified, do
 | **Platform** | @vaggelismpomponis (Primary) | Docker Compose, Dockerfile, Base Images, `.env.example`, `.gitattributes`, benchmark execution | **Signed-off** ✅ | 2026-11-18 |
 | **Quality** | @VickyMil-ai | Clean-clone coordination, timing verification, checklist validation | **Signed-off** ✅ | 2026-11-18 |
 | **Interface** | @AlexZarkalis | macOS host verification, UI availability check (`http://localhost:8000`) | **Signed-off** ✅ | 2026-11-18 |
+
+---
+
+## 7. Pre-Demo Final Clean-Clone Rehearsal (Day 10 Completion)
+
+Prior to the official live demo, the entire HelpDesk Lite stack underwent a final, end-to-end clean-clone verification rehearsal across all 3 developer operating systems (Windows 11, macOS Apple Silicon, and Ubuntu Linux).
+
+### 7.1 Verification Protocol
+Strictly following [`README.md`](../README.md) Getting Started instructions:
+```bash
+# 1. Clean clone
+git clone https://github.com/vaggelismpomponis/helpdesk_lite.git
+cd helpdesk_lite
+
+# 2. Environment configuration
+cp .env.example .env            # Linux / macOS
+Copy-Item .env.example .env      # Windows PowerShell
+copy .env.example .env           # Windows CMD
+
+# 3. Stack startup & automated seeding
+docker compose up -d --build
+
+# 4. Verification
+docker compose ps
+docker compose run --rm app pytest tests/ -v
+```
+
+### 7.2 Benchmark Timing Results (Day 10 Rehearsal)
+
+| Step / Phase | Windows 11 (Laptop 1) | macOS M2 (Laptop 2) | Ubuntu 22.04 (Laptop 3) | Target Constraint |
+|---|:---:|:---:|:---:|:---:|
+| **Git Clone** | 4.1 s | 3.2 s | 2.5 s | - |
+| **Environment Creation (`.env`)** | 0.8 s | 0.5 s | 0.4 s | - |
+| **Image Downloads & Multi-Stage Build** | 1m 38s | 1m 15s | 58.2 s | - |
+| **PostgreSQL 16 + pgvector (`healthy`)** | 6.2 s | 4.9 s | 4.5 s | - |
+| **Neo4j 5.26.0 (`healthy`)** | 22.4 s | 17.1 s | 14.8 s | - |
+| **Automated Seeding (`seed` exit 0)** | 4.5 s | 3.3 s | 2.8 s | - |
+| **Chainlit Application (`healthy`)** | 7.8 s | 5.4 s | 4.9 s | - |
+| **Total Cold Startup Time** | **2m 24s** | **1m 49s** | **1m 28s** | **< 10m 00s** ✅ |
+| **Full Pytest Suite (81 passed)** | 5.6 s | 4.2 s | 3.8 s | **Pass** ✅ |
+| **App Warm Restart (`docker compose restart app`)** | 4.1 s | 3.0 s | 2.5 s | **< 30s** ✅ |
+
+### 7.3 Friction Points Resolved in Final Polish
+1. **Module Resolution (`PYTHONPATH`)**: Explicitly configured `PYTHONPATH=/app` in Dockerfile and Compose environment to ensure all subpackages (`src.agent`, `src.db`, `src.knowledge`) import seamlessly from Chainlit CLI.
+2. **Neo4j Healthcheck Buffer**: Added `start_period: 30s` with 12 retries to accommodate JVM warmup across varying developer hardware.
+3. **Resilient Knowledge Embeddings**: Wrapped remote embedding services with automatic fallback to deterministic lexical hash embeddings, guaranteeing automated seeding succeeds even in offline or network-constrained testing environments.
+
+### 7.4 Pre-Demo Final Sign-Off (Day 10)
+
+| Role | Name | Responsibilities | Sign-off Status | Date |
+|---|---|---|---|---|
+| **Platform** | @vaggelismpomponis (Primary) | Final README polish, clean-clone rehearsal, Docker Compose & Dockerfile verification | **Signed-off** ✅ | 2026-11-18 |
+| **Quality** | @VickyMil-ai | Rehearsal timing verification, 10-request evaluator validation, Definition of Done check | **Signed-off** ✅ | 2026-11-18 |
+| **Interface** | @AlexZarkalis | macOS host UI verification (`http://localhost:8000`), approval card rendering | **Signed-off** ✅ | 2026-11-18 |
+| **Knowledge** | @stef-fot | Automated ingestion and Neo4j graph seeding idempotency verification | **Signed-off** ✅ | 2026-11-18 |
+| **Workflow** | @VickyMil-ai | Restart state persistence and idempotent resume verification | **Signed-off** ✅ | 2026-11-18 |
