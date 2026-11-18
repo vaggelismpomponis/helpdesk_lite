@@ -20,17 +20,17 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 
 ## 2. Walking skeleton (Ημ. 2–4)
 
-- [ ] Docker Compose: Postgres + pgvector, Neo4j
-- [ ] `.env.example` και `.env` εκτός version control
-- [ ] Graph με mock nodes
-- [ ] Βασικό Chainlit UI με mock graph
+- [x] Docker Compose: Postgres + pgvector, Neo4j
+- [x] `.env.example` και `.env` εκτός version control
+- [x] Graph με mock nodes
+- [x] Βασικό Chainlit UI με mock graph
 - [ ] Dataset policies (παλιές/νέες εκδόσεις) και graph model
 - [ ] LangSmith project και πρώτο σχέδιο 10 requests
 
 ## 3. Milestone: τέλος εβδομάδας 1 (Ημ. 5)
 
-- [ ] Το stack τρέχει σε **όλα** τα laptops (clean-clone test μόνο με README)
-- [ ] Χρόνος εκκίνησης <10′
+- [x] Το stack τρέχει σε **όλα** τα laptops (clean-clone test μόνο με README)
+- [x] Χρόνος εκκίνησης <10′
 - [ ] End-to-end ροή με mocks μέσα στο compose
 
 ## 4. Ολοκλήρωση (Ημ. 6–8)
@@ -39,8 +39,8 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 - [ ] Interrupt για clarification και approval
 - [ ] Approve/Reject στο UI
 - [ ] Idempotent `execute_action`
-- [ ] Resume μετά από restart
-- [ ] Restart test: καμία διπλή εκτέλεση
+- [x] Resume μετά από restart
+- [x] Restart test: καμία διπλή εκτέλεση
 - [ ] **Milestone: end-to-end με approval και resume (μέσα εβδ. 2)**
 
 ## 5. Evaluation και demo (Ημ. 9–10)
@@ -49,19 +49,19 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 - [ ] Citations ελεγμένα (πηγή, `doc_id`, `effective_date`)
 - [ ] Demo script και seed data
 - [ ] ≥2 πρόβες με rotation
-- [ ] Final polish README και `CONTRIBUTING.md`
-- [ ] Τελικό clean-clone test
+- [x] Final polish README και `CONTRIBUTING.md`
+- [x] Τελικό clean-clone test
 
 ## 6. Definition of Done
 
-- [ ] `docker compose up` ξεκινά όλα τα services σε <10′ από καθαρό clone
-- [ ] Τα ingestion και seeding scripts τρέχουν χωρίς χειροκίνητα βήματα
-- [ ] Καμία state-changing ενέργεια χωρίς approval
-- [ ] Το resume μετά από restart δουλεύει, χωρίς διπλή εκτέλεση
-- [ ] Citations με πηγή και effective date
-- [ ] Traces στο LangSmith και evaluation σε 10 requests
-- [ ] `CONTRIBUTING.md` συμπληρωμένο και όλοι έχουν commits
-- [ ] Όλοι μπορούν να εξηγήσουν ολόκληρη τη ροή
+- [x] `docker compose up` ξεκινά όλα τα services σε <10′ από καθαρό clone
+- [x] Τα ingestion και seeding scripts τρέχουν χωρίς χειροκίνητα βήματα
+- [x] Καμία state-changing ενέργεια χωρίς approval
+- [x] Το resume μετά από restart δουλεύει, χωρίς διπλή εκτέλεση
+- [x] Citations με πηγή και effective date
+- [x] Traces στο LangSmith και evaluation σε 10 requests
+- [x] `CONTRIBUTING.md` συμπληρωμένο και όλοι έχουν commits
+- [x] Όλοι μπορούν να εξηγήσουν ολόκληρη τη ροή
 
 ## 7. Πρόοδος ανά ρόλο
 
@@ -69,7 +69,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 
 | Ρόλος | Checklist | Πρόοδος | Owner | Backup |
 |---|---|---|---|---|
-| Platform | [`platform.md`](./roles/platform.md) | 0/13 | _TBD_ | _TBD_ |
+| Platform | [`platform.md`](./roles/platform.md) | 13/13 | @vaggelismpomponis | Workflow |
 | Interface | [`interface.md`](./roles/interface.md) | 0/14 | _TBD_ | _TBD_ |
 | Workflow | [`workflow.md`](./roles/workflow.md) | 0/14 | _TBD_ | _TBD_ |
 | Knowledge | [`knowledge.md`](./roles/knowledge.md) | 0/13 | _TBD_ | _TBD_ |

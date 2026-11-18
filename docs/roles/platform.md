@@ -10,9 +10,9 @@
 ## Βήματα
 
 ### Φάση 1 – Kick-off (Ημ. 1)
-1. Συμμετοχή στη συμφωνία contracts (State, models, 5 actions, tool signatures).
-2. Προτείνει δομή repo (`app/`, `scripts/`, `data/`, `docker/`) και την καταγράφει στο `CONTRIBUTING_LOG.md`.
-3. Ορίζει την πολιτική pinned versions για images και Python dependencies.
+1. Συμμετοχή στη συμφωνία contracts (State, models, 5 actions, tool signatures – [`ARCHITECTURE_CONTRACTS.md`](../ARCHITECTURE_CONTRACTS.md)).
+2. Προτείνει δομή repo (`src/` [ή `app/`], `scripts/`, `data/`, `docker/`) και την καταγράφει στο [`CONTRIBUTING_LOG.md`](../CONTRIBUTING_LOG.md).
+3. Ορίζει την πολιτική pinned versions για images και Python dependencies ([`PINNED_VERSIONS.md`](../PINNED_VERSIONS.md)).
 
 ### Φάση 2 – Stack (Ημ. 2–4)
 4. `docker-compose.yml` με Postgres + pgvector (extension `vector` ενεργό) και Neo4j. Volumes και healthchecks.
@@ -33,19 +33,19 @@
 
 ## Role checklist
 
-- [ ] Δομή repo και pinned versions συμφωνημένα και καταγεγραμμένα
-- [ ] `docker-compose.yml`: Postgres + pgvector, Neo4j, healthchecks, volumes
-- [ ] `.env.example` πλήρες, `.env` εκτός version control
-- [ ] Postgres init: extension pgvector, schema για tickets και checkpoints
-- [ ] Dockerfile και app service
-- [ ] README: Getting Started δοκιμασμένο
-- [ ] Clean-clone test σε ≥3 laptops (Ημ. 5)
-- [ ] Χρόνος εκκίνησης <10′ μετρημένος
-- [ ] Seeding/ingestion τρέχουν χωρίς χειροκίνητα βήματα
-- [ ] Restart του app/stack δοκιμασμένο με Workflow
-- [ ] Τελικό clean-clone test πριν το demo
-- [ ] Έχω commits και τουλάχιστον ένα review σε PR άλλου ρόλου
-- [ ] Μπορώ να εξηγήσω ολόκληρη τη ροή
+- [x] Δομή repo και pinned versions συμφωνημένα και καταγεγραμμένα ([CONTRIBUTING_LOG.md](../CONTRIBUTING_LOG.md), [PINNED_VERSIONS.md](../PINNED_VERSIONS.md), [ARCHITECTURE_CONTRACTS.md](../ARCHITECTURE_CONTRACTS.md))
+- [x] `docker-compose.yml`: Postgres + pgvector, Neo4j, healthchecks, volumes
+- [x] `.env.example` πλήρες, `.env` εκτός version control
+- [x] Postgres init: extension pgvector, schema για tickets και checkpoints
+- [x] Dockerfile και app service
+- [x] README: Getting Started δοκιμασμένο
+- [x] Clean-clone test σε ≥3 laptops (Ημ. 5) ([CLEAN_CLONE_BENCHMARK.md](../CLEAN_CLONE_BENCHMARK.md))
+- [x] Χρόνος εκκίνησης <10′ μετρημένος (~2–3 λεπτά)
+- [x] Seeding/ingestion τρέχουν χωρίς χειροκίνητα βήματα (Compose `seed` service & `scripts/seed.py`)
+- [x] Restart του app/stack δοκιμασμένο με Workflow
+- [x] Τελικό clean-clone test πριν το demo
+- [x] Έχω commits και τουλάχιστον ένα review σε PR άλλου ρόλου
+- [x] Μπορώ να εξηγήσω ολόκληρη τη ροή
 
 ## Backup
 Ορίζεται στο `CONTRIBUTING_LOG.md`. Προτείνεται: Workflow.
