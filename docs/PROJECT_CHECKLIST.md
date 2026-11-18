@@ -31,7 +31,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 
 - [x] Το stack τρέχει σε **όλα** τα laptops (clean-clone test μόνο με README)
 - [x] Χρόνος εκκίνησης <10′
-- [ ] End-to-end ροή με mocks μέσα στο compose
+- [x] End-to-end ροή με mocks μέσα στο compose
 
 ## 4. Ολοκλήρωση (Ημ. 6–8)
 
