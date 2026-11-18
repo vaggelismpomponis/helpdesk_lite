@@ -105,7 +105,7 @@ def test_chainlit_starter_app_contracts():
     app_py = REPO_ROOT / "src" / "app.py"
     assert app_py.exists(), "src/app.py must exist"
 
-    content = app_py.read_text()
+    content = app_py.read_text(encoding="utf-8")
     assert "thread_id" in content
     assert "cl.context.session.id" in content
 
@@ -203,4 +203,20 @@ def test_app_restart_configuration():
     volumes = data.get("volumes", {})
     assert "postgres_data" in volumes, "postgres_data volume must be persistent"
     assert "neo4j_data" in volumes, "neo4j_data volume must be persistent"
+
+
+def test_database_ports_bound_to_loopback():
+    """Verify PostgreSQL and Neo4j database ports are bound to 127.0.0.1 by default for security."""
+    compose_file = REPO_ROOT / "docker-compose.yml"
+    assert compose_file.exists(), "docker-compose.yml must exist"
+
+    data = yaml.safe_load(compose_file.read_text(encoding="utf-8"))
+    services = data.get("services", {})
+
+    pg_ports = services.get("postgres", {}).get("ports", [])
+    assert any("127.0.0.1:" in str(p) for p in pg_ports), "PostgreSQL port must be bound to 127.0.0.1"
+
+    neo4j_ports = services.get("neo4j", {}).get("ports", [])
+    assert any("127.0.0.1:" in str(p) for p in neo4j_ports), "Neo4j ports must be bound to 127.0.0.1"
+
 

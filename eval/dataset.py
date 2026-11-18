@@ -42,7 +42,7 @@ def policy_versions(policies_dir: Path = POLICIES_DIR) -> dict[str, list[str]]:
     """Map each doc_id to all of its effective dates, from the policy front matter."""
     versions: dict[str, list[str]] = {}
     for path in sorted(policies_dir.glob("*.md")):
-        fields = dict(_FRONT_MATTER_FIELD.findall(path.read_text()))
+        fields = dict(_FRONT_MATTER_FIELD.findall(path.read_text(encoding="utf-8")))
         if "doc_id" in fields and "effective_date" in fields:
             versions.setdefault(fields["doc_id"], []).append(fields["effective_date"])
     return versions
@@ -91,7 +91,7 @@ def load_examples(
     path: Path = DATASET_PATH, policies_dir: Path = POLICIES_DIR
 ) -> list[dict[str, Any]]:
     """Load and convert every entry of the evaluation dataset."""
-    entries = json.loads(path.read_text())
+    entries = json.loads(path.read_text(encoding="utf-8"))
     ids = [entry["id"] for entry in entries]
     if len(set(ids)) != len(ids):
         raise ValueError(f"duplicate example ids: {ids}")
