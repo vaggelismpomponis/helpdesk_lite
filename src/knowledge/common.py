@@ -33,23 +33,29 @@ def neo4j_driver() -> Driver:
 
 
 def embed(texts: list[str]) -> list[list[float]]:
+    offline_mode = (
+        os.getenv("OFFLINE_MODE", "false").lower() in ("true", "1")
+        or os.getenv("EMBEDDING_PROVIDER") == "offline"
+    )
+
     azure_key = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
-    if azure_key and not azure_key.startswith("your_"):
+    if not offline_mode and azure_key and not azure_key.startswith("your_"):
         from langchain_openai import AzureOpenAIEmbeddings
 
         # reads AZURE_OPENAI_ENDPOINT and OPENAI_API_VERSION from the environment itself
         return AzureOpenAIEmbeddings(
             azure_deployment=os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT"], dimensions=DIM
         ).embed_documents(texts)
+
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if openai_key and not openai_key.startswith("your_"):
+    if not offline_mode and openai_key and not openai_key.startswith("your_"):
         from langchain_openai import OpenAIEmbeddings
 
         return OpenAIEmbeddings(
             model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"), dimensions=DIM
         ).embed_documents(texts)
-    # shortcut: hashed bag-of-words (lexical, not semantic) so dev and tests run offline;
-    # upgrade by setting AZURE_OPENAI_API_KEY or OPENAI_API_KEY and re-running ingestion.
+
+    # Deterministic lexical embeddings for offline testing or placeholder configurations
     return [_hash_embed(t) for t in texts]
 
 

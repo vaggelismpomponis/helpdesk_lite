@@ -173,6 +173,27 @@ docker compose down
 docker compose down -v
 ```
 
+### Container Restart & Idempotency Testing
+
+HelpDesk Lite is architected to withstand container restarts, crashes, and message replays without losing user conversation state or duplicating approved state-changing actions:
+
+- **Persistent Checkpoints (`PostgresSaver`)**: LangGraph conversation threads and interrupted approval states are stored directly in PostgreSQL (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes` tables) backed by the persistent `postgres_data` volume.
+- **Graceful Shutdown**: The `app` service is configured with `stop_grace_period: 15s` in `docker-compose.yml` to allow in-flight database transactions and checkpointer writes to complete cleanly prior to container restart or shutdown.
+- **Strict Idempotency Guard**: All proposed and executed actions are tracked in PostgreSQL (`audit_log` and `tickets` tables) with unique `action_id` constraints and row-level locking (`SELECT ... FOR UPDATE`), guaranteeing approved actions never re-execute upon container recovery.
+
+To verify container restart and idempotency behavior:
+
+```bash
+# Test 1: Warm restart of app container (Postgres and Neo4j stay active)
+docker compose restart app
+
+# Test 2: Restart full stack (preserves persistent named volumes)
+docker compose down && docker compose up -d
+
+# Test 3: Run automated restart & idempotency verification suite
+pytest tests/test_restart_idempotency.py -v
+```
+
 ### Automated Ingestion & Database Seeding
 
 Knowledge base policy documents (with chunk embeddings in `pgvector`) and the Neo4j service dependency graph are **automatically seeded** upon startup by the `seed` container before the `app` container starts. No manual SQL or database manipulation is required.
@@ -292,7 +313,7 @@ Two-week timeline.
 - [ ] `docker compose up` starts all services in <10 minutes from a clean clone.
 - [ ] Ingestion and seeding scripts run without manual steps.
 - [ ] No state-changing action without approval.
-- [ ] Resume after restart works, with no duplicate execution.
+- [x] Resume after restart works, with no duplicate execution.
 - [ ] Citations include source and effective date.
 - [ ] Traces in LangSmith and an evaluation run over 10 requests.
 - [ ] `CONTRIBUTING.md` completed and every member has commits.
