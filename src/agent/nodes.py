@@ -154,7 +154,7 @@ def _choose_action(state: AgentState) -> tuple[ActionType, str]:
         return ActionType.ANSWER_POLICY, f"Policy {state.policy_result.doc_id} answers the question"
     if any(w in text for w in RESET_WORDS):
         return ActionType.RESET_CREDENTIALS, "Credential reset requested and no outage explains it"
-    if any(w in text for w in CRITICAL_WORDS):
+    if any(w in text for w in CRITICAL_WORDS) or "no assigned team" in text or "escalate" in text:
         return ActionType.ESCALATE, "Critical incident"
     return ActionType.OPEN_TICKET, "Standard issue requiring investigation"
 
