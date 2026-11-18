@@ -127,7 +127,14 @@ git clone https://github.com/vaggelismpomponis/helpdesk_lite.git
 cd helpdesk_lite
 
 # 2. Configure environment variables (copy template)
+# Linux / macOS:
 cp .env.example .env
+
+# Windows (PowerShell):
+Copy-Item .env.example .env
+
+# Windows (CMD):
+copy .env.example .env
 
 # 3. Start all services (PostgreSQL + pgvector, Neo4j, Chainlit App)
 docker compose up -d --build
@@ -173,6 +180,20 @@ If you have an existing PostgreSQL Docker volume (`postgres_data`) from an earli
 ```bash
 docker compose exec -T postgres psql -U postgres -d helpdesk < docker/postgres/migrations/001_upgrade_schema.sql
 ```
+
+### Cross-Platform & Clean-Clone Troubleshooting
+
+If you encounter issues during a clean clone on your operating system, check the following resolutions:
+
+| Friction Point | Platform | Cause & Resolution |
+|---|---|---|
+| **Line Endings (CRLF / LF)** | Windows | Git on Windows may convert LF to CRLF by default. The repository includes [`.gitattributes`](./.gitattributes) enforcing LF line endings for all scripts, SQL, and Docker files. Ensure you do not override `core.autocrlf` locally. |
+| **Port Conflicts (5432, 7474, 7687, 8000)** | All | If a service is already running on port 5432 (local Postgres), 7474/7687 (local Neo4j), or 8000 (local web app), modify the corresponding port in your `.env` file (e.g. `POSTGRES_PORT=5433`, `NEO4J_HTTP_PORT=7475`, `NEO4J_BOLT_PORT=7688`, `APP_PORT=8001`) without modifying `docker-compose.yml`. |
+| **Docker Daemon Socket Permission** | Linux | If `docker compose up` returns `permission denied while trying to connect to the Docker daemon socket`, grant your user docker privileges: `sudo usermod -aG docker $USER` and log back in or run `newgrp docker`. |
+| **Compose Syntax Error on `required: false`** | Linux / macOS | Requires Docker Compose **v2.24.0+**. Verify your version with `docker compose version`. On older Linux package manager installs, upgrade Docker Compose plugin via official Docker repositories. |
+| **Stale Volume State** | All | If database schemas or volume files are in an inconsistent state from previous testing, run `docker compose down -v` to wipe named volumes and trigger clean initialization. |
+
+For detailed clean-clone benchmark results (<10 minutes across Windows, macOS, and Linux), see [`docs/CLEAN_CLONE_BENCHMARK.md`](./docs/CLEAN_CLONE_BENCHMARK.md).
 
 For Git setup, branching and pull request workflow, see the [Git Guide](./docs/GIT_GUIDE.md).
 

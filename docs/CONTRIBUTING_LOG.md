@@ -42,6 +42,7 @@ Status: `Proposed` (προτάθηκε) · `Decided` (συμφωνήθηκε) ·
 | 2026-11-16 | Platform | Day 1 Kick-off: Συμφωνία αρχιτεκτονικών συμβολαίων (State, Pydantic models, 5 actions, tool signatures, κανόνας `thread_id` ↔ session), επίσημη δομή repository (`src/`, `docker/`, `scripts/`, `data/`, `tests/`, `evals/`, `docs/`) με σαφή module boundaries, και πολιτική pinned versions για Docker images και Python dependencies (`requirements.txt`). | Διασφάλιση κοινής βάσης, ανεξάρτητη παράλληλη ανάπτυξη με mocks χωρίς merge conflicts, και εγγύηση εκκίνησης stack σε <10′ σε όλα τα λειτουργικά συστήματα (Windows/Linux/macOS). | Issue #2, [ARCHITECTURE_CONTRACTS.md](./ARCHITECTURE_CONTRACTS.md), [PINNED_VERSIONS.md](./PINNED_VERSIONS.md), [COLLABORATION_GUIDE.md](./COLLABORATION_GUIDE.md) |
 | 2026-11-17 | Platform | PostgreSQL Schema Init & Upgrade Migration: Ενεργοποίηση `pgvector` extension, πίνακας `tickets` για state-changing ticketing, πίνακας `audit_log` για idempotency tracking και audit trail, πίνακας `policy_chunks` με HNSW index (`embedding vector(1536)`) για το Knowledge retrieval, επίσημοι πίνακες LangGraph `PostgresSaver` (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`) για state persistence και seamless resume μετά από container restart, και non-destructive upgrade migration (`001_upgrade_schema.sql`) με safe column addition και data backfill για υφιστάμενα Docker volumes. | Υλοποίηση Issue #5, αποτροπή duplicate executions (idempotency guard), ασφαλής αναβάθμιση υφιστάμενων compose volumes χωρίς απώλεια δεδομένων, και πλήρης ετοιμότητα βάσης για Workflow και Knowledge roles. | Issue #5, [`docker/postgres/init.sql`](../docker/postgres/init.sql), [`docker/postgres/migrations/001_upgrade_schema.sql`](../docker/postgres/migrations/001_upgrade_schema.sql) |
 | 2026-11-17 | Platform | Multi-stage Dockerfile (python:3.11-slim) για το Chainlit app, integration στο docker-compose.yml με helpdesk_network, healthchecks και volume mounts, starter src/app.py με session mapping (thread_id), και επαληθευμένες οδηγίες εκκίνησης στο README.md. Handoff και συμφωνία με Interface role (✋). | Ολοκλήρωση Phase 2 (Steps 7–8) του Platform role, εξασφάλιση one-command startup (docker compose up) σε <10′. | Issue #6, PR #68 |
+| 2026-11-18 | Platform | Day 5 Milestone Clean-Clone Test & Startup Benchmark (<10′): Επιτυχής εκτέλεση clean clone μόνο με το README σε ≥3 laptops (Windows 11, macOS M2, Ubuntu 22.04 LTS) με μέσο χρόνο εκκίνησης ~2–3′ (<10′). Προσθήκη `.gitattributes` για LF line endings, διασταυρούμενες οδηγίες cp/Copy-Item/copy στο README.md, παραμετροποίηση ports Neo4j στο docker-compose.yml και οδηγίες αντιμετώπισης προβλημάτων (troubleshooting). ✋ Συντονισμός με Quality (@VickyMil-ai). | Επίτευξη του κρίσιμου milestone τέλους 1ης εβδομάδας, απρόσκοπτη εκκίνηση του stack από όλα τα μέλη της ομάδας χωρίς friction. | Issue #7, [CLEAN_CLONE_BENCHMARK.md](./CLEAN_CLONE_BENCHMARK.md) |
 
 ## Team Sign-off (PostgreSQL Database Schema Init – Issue #5)
 
@@ -68,10 +69,21 @@ Status: `Proposed` (προτάθηκε) · `Decided` (συμφωνήθηκε) ·
 | **Platform** | @vaggelismpomponis (Primary) | Multi-stage Dockerfile, Chainlit service & network linking | **Signed-off** | 2026-11-17 |
 | **Interface** | @AlexZarkalis | UI containerization, app entrypoint (`src/app.py`) & port 8000 contract | **Signed-off** | 2026-11-17 |
 
+## Team Sign-off (Day 5 Milestone Clean-Clone Test & Benchmark ✋)
+
+| Ρόλος | Εκπρόσωπος | Πεδίο Συμφωνίας | Status | Ημερομηνία |
+|---|---|---|---|---|
+| **Platform** | @vaggelismpomponis (Primary) | Clean clone fixes, `.gitattributes`, cross-platform copy, benchmark docs | **Signed-off** | 2026-11-18 |
+| **Quality** | @VickyMil-ai | Συντονισμός clean-clone test σε ≥3 laptops, χρόνος <10′, έλεγχος checklist | **Signed-off** | 2026-11-18 |
+| **Interface** | @AlexZarkalis | Επαλήθευση σε macOS περιβάλλον & διαθεσιμότητα UI (port 8000) | **Signed-off** | 2026-11-18 |
+
 ## Log προόδου και προβλημάτων (προαιρετικό)
 
 Σύντομες σημειώσεις που βοηθούν στο `CONTRIBUTING.md` ή στο retrospective (π.χ. «το clean-clone test απέτυχε λόγω X»).
 
 | Ημερομηνία | Ρόλος | Σημείωση | Επηρεάζει CONTRIBUTING; |
 |---|---|---|---|
-| | | | |
+| 2026-11-18 | Platform | Clean-clone test σε Windows με core.autocrlf δημιουργούσε CRLF line endings σε SQL scripts. Προστέθηκε `.gitattributes` με κανόνα `* text=auto eol=lf`. | Όχι (αυτόματη ρύθμιση git) |
+| 2026-11-18 | Platform | Η εντολή `cp .env.example .env` αποτύγχανε σε Windows Command Prompt (`cmd.exe`). Προστέθηκαν εναλλακτικές εντολές (`Copy-Item` για PowerShell, `copy` για CMD) στο `README.md`. | Ναι (οδηγίες README) |
+| 2026-11-18 | Platform | Σε μηχανήματα με προϋπάρχοντα services στα ports 7474/7687 (Neo4j), το compose εμφάνιζε port conflict. Προστέθηκαν `NEO4J_HTTP_PORT` και `NEO4J_BOLT_PORT` στο `docker-compose.yml` και `.env.example`. | Όχι |
+| 2026-11-18 | Quality | Στο Ubuntu 22.04 LTS χρήστες χωρίς docker group membership είχαν permission denied στο docker socket. Προστέθηκε ενότητα troubleshooting στο `README.md`. | Ναι (οδηγίες README) |
