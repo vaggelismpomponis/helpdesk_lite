@@ -31,7 +31,30 @@ def route_after_approval(state: AgentState) -> str:
     return "execute_action" if state.action_proposal.status == ActionStatus.APPROVED else "respond"
 
 
-def build_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> CompiledStateGraph:
+def build_graph(
+    checkpointer: Optional[BaseCheckpointSaver] = None,
+    *,
+    use_postgres: bool = False,
+) -> CompiledStateGraph:
+    """Build and compile the HelpDesk Lite agent workflow graph.
+
+    Args:
+        checkpointer: Optional custom BaseCheckpointSaver instance.
+        use_postgres: When True and checkpointer is None, initializes PostgresSaver for
+                      durable state persistence across process restarts. Falls back to
+                      MemorySaver if the database connection fails.
+    """
+    if checkpointer is None:
+        if use_postgres:
+            try:
+                from src.db.checkpointer import PostgresSaver
+
+                checkpointer = PostgresSaver()
+            except Exception:
+                checkpointer = MemorySaver()
+        else:
+            checkpointer = MemorySaver()
+
     builder = StateGraph(AgentState)
     for node in (
         nodes.extract_fields,
@@ -56,10 +79,15 @@ def build_graph(checkpointer: Optional[BaseCheckpointSaver] = None) -> CompiledS
     builder.add_edge("respond", END)
 
     return builder.compile(
-        checkpointer=checkpointer or MemorySaver(),
+        checkpointer=checkpointer,
         interrupt_after=["ask_clarification"],  # question posted, wait for the user's reply
         interrupt_before=["human_approval"],  # proposal pending, wait for the operator
     )
+
+
+def get_production_graph() -> CompiledStateGraph:
+    """Instantiate production LangGraph compiled with persistent PostgresSaver."""
+    return build_graph(use_postgres=True)
 
 
 def config_for(thread_id: str, user_email: Optional[str] = None) -> dict[str, Any]:
