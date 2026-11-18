@@ -39,8 +39,8 @@
 - [x] Postgres init: extension pgvector, schema για tickets και checkpoints
 - [x] Dockerfile και app service
 - [x] README: Getting Started δοκιμασμένο
-- [ ] Clean-clone test σε ≥3 laptops (Ημ. 5)
-- [ ] Χρόνος εκκίνησης <10′ μετρημένος
+- [x] Clean-clone test σε ≥3 laptops (Ημ. 5) ([CLEAN_CLONE_BENCHMARK.md](../CLEAN_CLONE_BENCHMARK.md))
+- [x] Χρόνος εκκίνησης <10′ μετρημένος (~2–3 λεπτά)
 - [ ] Seeding/ingestion τρέχουν χωρίς χειροκίνητα βήματα
 - [ ] Restart του app/stack δοκιμασμένο με Workflow
 - [ ] Τελικό clean-clone test πριν το demo

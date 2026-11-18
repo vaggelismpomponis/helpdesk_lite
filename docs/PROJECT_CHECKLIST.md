@@ -29,8 +29,8 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 
 ## 3. Milestone: τέλος εβδομάδας 1 (Ημ. 5)
 
-- [ ] Το stack τρέχει σε **όλα** τα laptops (clean-clone test μόνο με README)
-- [ ] Χρόνος εκκίνησης <10′
+- [x] Το stack τρέχει σε **όλα** τα laptops (clean-clone test μόνο με README)
+- [x] Χρόνος εκκίνησης <10′
 - [ ] End-to-end ροή με mocks μέσα στο compose
 
 ## 4. Ολοκλήρωση (Ημ. 6–8)
