@@ -60,3 +60,15 @@ def get_pooled_connection() -> Generator[psycopg.Connection, None, None]:
     pool = get_connection_pool()
     with pool.connection() as conn:
         yield conn
+
+
+def is_postgres_available() -> bool:
+    """Check if PostgreSQL is reachable."""
+    try:
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+                return True
+    except Exception:
+        return False
+

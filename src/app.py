@@ -10,20 +10,16 @@ from __future__ import annotations
 
 import chainlit as cl
 
-from src.agent.graph import build_graph, config_for, decide, pending, reply, start
+from src.agent.graph import (
+    build_graph,
+    config_for,
+    decide,
+    get_production_graph,
+    pending,
+    reply,
+    start,
+)
 from src.agent.models import ActionStatus
-from src.db.checkpointer import PostgresSaver
-
-
-def get_production_graph():
-    """Instantiate production LangGraph compiled with persistent PostgresSaver."""
-    try:
-        saver = PostgresSaver()
-        return build_graph(checkpointer=saver)
-    except Exception:
-        # Fallback to MemorySaver if database is unreachable in offline tests
-        return build_graph()
-
 
 graph = get_production_graph()
 
