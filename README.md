@@ -105,7 +105,7 @@ The project is in its initial phase. This repository currently contains the proj
 | Documentation (project notes, Git guide) | Available in [`docs/`](./docs) |
 | `docker-compose.yml` and `.env.example` | Available |
 | Chainlit application | Available (Dockerized Skeleton) |
-| Policy ingestion and graph seeding scripts | Planned |
+| Policy ingestion and graph seeding scripts | Available (Automated in Compose via `seed` service) |
 | LangSmith project with evaluation run (10 requests) | Planned |
 | `CONTRIBUTING.md` (team agreement) | Available in [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
 | 10-minute live demo, including resume after restart | Planned |
@@ -164,6 +164,20 @@ docker compose down
 
 # Stop the stack and remove persistent data volumes
 docker compose down -v
+```
+
+### Automated Ingestion & Database Seeding
+
+Knowledge base policy documents (with chunk embeddings in `pgvector`) and the Neo4j service dependency graph are **automatically seeded** upon startup by the `seed` container before the `app` container starts. No manual SQL or database manipulation is required.
+
+To re-run seeding on demand at any time (verified idempotent execution):
+
+```bash
+# Using Docker Compose (recommended)
+docker compose run --rm seed
+
+# Or directly via Python CLI (requires active database connections)
+python scripts/seed.py
 ```
 
 ### Upgrading Existing Database Volumes

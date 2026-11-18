@@ -34,10 +34,10 @@
 - [ ] Output models των tools συμφωνημένα
 - [ ] Dataset policies με παλιές/νέες εκδόσεις
 - [ ] Graph model Neo4j τεκμηριωμένο
-- [ ] Ingestion script (chunking, embeddings, `doc_id`, `effective_date`)
-- [ ] Seeding script Neo4j, idempotent
+- [x] Ingestion script (chunking, embeddings, `doc_id`, `effective_date`)
+- [x] Seeding script Neo4j, idempotent
 - [ ] Mock tools με τελικές υπογραφές διαθέσιμα στον Workflow
-- [ ] Scripts τρέχουν χωρίς χειροκίνητα βήματα μέσα στο compose
+- [x] Scripts τρέχουν χωρίς χειροκίνητα βήματα μέσα στο compose
 - [ ] `retrieve_policy`: κερδίζει η πιο πρόσφατη έκδοση και επιστρέφει citation
 - [ ] `check_graph`: εξαρτήσεις και ενεργά outages
 - [ ] Unit tests tools
