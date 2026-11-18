@@ -39,8 +39,8 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 - [ ] Interrupt για clarification και approval
 - [ ] Approve/Reject στο UI
 - [ ] Idempotent `execute_action`
-- [ ] Resume μετά από restart
-- [ ] Restart test: καμία διπλή εκτέλεση
+- [x] Resume μετά από restart
+- [x] Restart test: καμία διπλή εκτέλεση
 - [ ] **Milestone: end-to-end με approval και resume (μέσα εβδ. 2)**
 
 ## 5. Evaluation και demo (Ημ. 9–10)
@@ -57,7 +57,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 - [ ] `docker compose up` ξεκινά όλα τα services σε <10′ από καθαρό clone
 - [x] Τα ingestion και seeding scripts τρέχουν χωρίς χειροκίνητα βήματα
 - [ ] Καμία state-changing ενέργεια χωρίς approval
-- [ ] Το resume μετά από restart δουλεύει, χωρίς διπλή εκτέλεση
+- [x] Το resume μετά από restart δουλεύει, χωρίς διπλή εκτέλεση
 - [ ] Citations με πηγή και effective date
 - [ ] Traces στο LangSmith και evaluation σε 10 requests
 - [ ] `CONTRIBUTING.md` συμπληρωμένο και όλοι έχουν commits

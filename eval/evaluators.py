@@ -8,7 +8,13 @@ Names follow docs/ARCHITECTURE_CONTRACTS.md: ``ActionType`` values, ``ActionStat
 the ``doc_id`` / ``effective_date`` citation fields of ``PolicyResult``.
 """
 
-from typing import Any, Literal, NotRequired, TypedDict
+import sys
+from typing import Any, Literal
+
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, TypedDict
+else:
+    from typing_extensions import NotRequired, TypedDict
 
 # ActionType values that change state and require human approval (contracts, section 5).
 STATE_CHANGING_ACTIONS = {"reset_credentials", "open_ticket", "escalate"}

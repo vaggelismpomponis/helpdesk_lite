@@ -35,19 +35,25 @@ def neo4j_driver() -> Driver:
 def embed(texts: list[str]) -> list[list[float]]:
     azure_key = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
     if azure_key and not azure_key.startswith("your_"):
-        from langchain_openai import AzureOpenAIEmbeddings
+        try:
+            from langchain_openai import AzureOpenAIEmbeddings
 
-        # reads AZURE_OPENAI_ENDPOINT and OPENAI_API_VERSION from the environment itself
-        return AzureOpenAIEmbeddings(
-            azure_deployment=os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT"], dimensions=DIM
-        ).embed_documents(texts)
+            # reads AZURE_OPENAI_ENDPOINT and OPENAI_API_VERSION from the environment itself
+            return AzureOpenAIEmbeddings(
+                azure_deployment=os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT"], dimensions=DIM
+            ).embed_documents(texts)
+        except Exception:
+            pass
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
     if openai_key and not openai_key.startswith("your_"):
-        from langchain_openai import OpenAIEmbeddings
+        try:
+            from langchain_openai import OpenAIEmbeddings
 
-        return OpenAIEmbeddings(
-            model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"), dimensions=DIM
-        ).embed_documents(texts)
+            return OpenAIEmbeddings(
+                model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"), dimensions=DIM
+            ).embed_documents(texts)
+        except Exception:
+            pass
     # shortcut: hashed bag-of-words (lexical, not semantic) so dev and tests run offline;
     # upgrade by setting AZURE_OPENAI_API_KEY or OPENAI_API_KEY and re-running ingestion.
     return [_hash_embed(t) for t in texts]
