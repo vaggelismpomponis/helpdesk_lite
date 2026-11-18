@@ -43,9 +43,9 @@
 - [x] Χρόνος εκκίνησης <10′ μετρημένος (~2–3 λεπτά)
 - [x] Seeding/ingestion τρέχουν χωρίς χειροκίνητα βήματα (Compose `seed` service & `scripts/seed.py`)
 - [x] Restart του app/stack δοκιμασμένο με Workflow
-- [ ] Τελικό clean-clone test πριν το demo
-- [ ] Έχω commits και τουλάχιστον ένα review σε PR άλλου ρόλου
-- [ ] Μπορώ να εξηγήσω ολόκληρη τη ροή
+- [x] Τελικό clean-clone test πριν το demo
+- [x] Έχω commits και τουλάχιστον ένα review σε PR άλλου ρόλου
+- [x] Μπορώ να εξηγήσω ολόκληρη τη ροή
 
 ## Backup
 Ορίζεται στο `CONTRIBUTING_LOG.md`. Προτείνεται: Workflow.

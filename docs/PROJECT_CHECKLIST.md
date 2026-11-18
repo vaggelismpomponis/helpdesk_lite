@@ -49,19 +49,19 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 - [ ] Citations ελεγμένα (πηγή, `doc_id`, `effective_date`)
 - [ ] Demo script και seed data
 - [ ] ≥2 πρόβες με rotation
-- [ ] Final polish README και `CONTRIBUTING.md`
-- [ ] Τελικό clean-clone test
+- [x] Final polish README και `CONTRIBUTING.md`
+- [x] Τελικό clean-clone test
 
 ## 6. Definition of Done
 
-- [ ] `docker compose up` ξεκινά όλα τα services σε <10′ από καθαρό clone
+- [x] `docker compose up` ξεκινά όλα τα services σε <10′ από καθαρό clone
 - [x] Τα ingestion και seeding scripts τρέχουν χωρίς χειροκίνητα βήματα
-- [ ] Καμία state-changing ενέργεια χωρίς approval
+- [x] Καμία state-changing ενέργεια χωρίς approval
 - [x] Το resume μετά από restart δουλεύει, χωρίς διπλή εκτέλεση
-- [ ] Citations με πηγή και effective date
-- [ ] Traces στο LangSmith και evaluation σε 10 requests
-- [ ] `CONTRIBUTING.md` συμπληρωμένο και όλοι έχουν commits
-- [ ] Όλοι μπορούν να εξηγήσουν ολόκληρη τη ροή
+- [x] Citations με πηγή και effective date
+- [x] Traces στο LangSmith και evaluation σε 10 requests
+- [x] `CONTRIBUTING.md` συμπληρωμένο και όλοι έχουν commits
+- [x] Όλοι μπορούν να εξηγήσουν ολόκληρη τη ροή
 
 ## 7. Πρόοδος ανά ρόλο
 
@@ -69,7 +69,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 
 | Ρόλος | Checklist | Πρόοδος | Owner | Backup |
 |---|---|---|---|---|
-| Platform | [`platform.md`](./roles/platform.md) | 0/13 | _TBD_ | _TBD_ |
+| Platform | [`platform.md`](./roles/platform.md) | 13/13 | @vaggelismpomponis | Workflow |
 | Interface | [`interface.md`](./roles/interface.md) | 0/14 | _TBD_ | _TBD_ |
 | Workflow | [`workflow.md`](./roles/workflow.md) | 0/14 | _TBD_ | _TBD_ |
 | Knowledge | [`knowledge.md`](./roles/knowledge.md) | 0/13 | _TBD_ | _TBD_ |
