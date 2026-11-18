@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from src.agent.models import GraphResult, PolicyResult
+from src.knowledge.models import GraphResult, PolicyResult
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 SEED = json.loads((DATA_DIR / "graph_seed.json").read_text(encoding="utf-8"))
@@ -71,7 +71,3 @@ def check_graph(application: str) -> GraphResult:
         dependencies=[SERVICES[s] for s in deps],
         active_outages=[SERVICES[s] for s in deps if s in OPEN_OUTAGE_SERVICES],
     )
-
-
-def find_employee(email: Optional[str]) -> Optional[str]:
-    return next((e["name"] for e in SEED["employees"] if e["email"] == email), None)

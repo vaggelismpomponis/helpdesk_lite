@@ -18,13 +18,10 @@ from src.agent.models import (
 )
 
 QUESTION_WORDS = ("what", "how", "do", "does", "is", "are", "can", "which", "when", "where", "who")
-RESET_WORDS = ("reset", "password", "locked out", "credential")
+REQUEST_PREFIXES = ("can you", "could you", "would you", "will you", "can i get", "please")
+RESET_WORDS =("reset", "password", "locked out", "credential")
 CRITICAL_WORDS = ("critical", "production down", "data breach", "security incident")
-FIELD_PROMPTS = {
-    "employee": "who you are (name or work email)",
-    "application": "which application or system is affected",
-    "symptom": "what is happening (the error or symptom)",
-}
+CLARIFICATION_QUESTION = "Which application or system is affected?"
 
 # Stand-in for the Postgres action table until step 10 (idempotent execution).
 EXECUTED_ACTION_IDS: set[str] = set()
@@ -35,25 +32,32 @@ def _user_text(state: AgentState) -> str:
 
 
 def is_question(text: str) -> bool:
-    words = text.strip().split()
-    return bool(words) and words[0].lower().strip("¿") in QUESTION_WORDS and text.rstrip().endswith("?")
+    """Information question ("What is...?"), not a polite request ("Can you reset...?")."""
+    lowered = text.strip().lower()
+    if lowered.startswith(REQUEST_PREFIXES):
+        return False
+    words = lowered.split()
+    return bool(words) and words[0] in QUESTION_WORDS and lowered.endswith("?")
 
 
 def extract_fields(state: AgentState, config: RunnableConfig) -> dict:
+    """Mock extraction: asks for clarification only when a request names no application.
+
+    The full rule (optional fields, ask for any missing one, never guess) is issue #25.
+    """
     text = _user_text(state)
-    lowered = text.lower()
-    # The sender comes from the Chainlit session, passed in config["configurable"]["user_email"].
-    employee = mocks.find_employee(config.get("configurable", {}).get("user_email"))
     fields = ExtractedFields(
-        employee=employee,
+        # The sender comes from the Chainlit session, passed in config["configurable"]["user_email"].
+        employee=config.get("configurable", {}).get("user_email"),
         application=mocks.find_application(text),
         symptom=text.strip() or None,
-        urgency="high" if any(w in lowered for w in ("urgent", "asap", "critical")) else None,
     )
-    # Policy questions do not need triage fields; only incident requests are checked.
-    missing = [] if is_question(text) else [f for f in FIELD_PROMPTS if not getattr(fields, f)]
-    question = f"To help you, please tell me {' and '.join(FIELD_PROMPTS[f] for f in missing)}." if missing else None
-    return {"extracted_fields": fields, "needs_clarification": bool(missing), "clarification_question": question}
+    needs_clarification = fields.application is None and not is_question(text)
+    return {
+        "extracted_fields": fields,
+        "needs_clarification": needs_clarification,
+        "clarification_question": CLARIFICATION_QUESTION if needs_clarification else None,
+    }
 
 
 def ask_clarification(state: AgentState) -> dict:
