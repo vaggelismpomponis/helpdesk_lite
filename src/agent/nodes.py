@@ -35,8 +35,9 @@ _SEED_DATA = (
 OFFICES = sorted({e["office"] for e in _SEED_DATA["employees"] if "office" in e})
 DEVICES = sorted({e["device"] for e in _SEED_DATA["employees"] if "device" in e})
 
-# Policy that governs an action, cited when the request itself matched no policy.
+# Policy that governs an action, cited unless the request names a policy topic (see _citation_for).
 POLICY_BY_ACTION = {
+    "reset_credentials": "POL-001",
     "link_outage": "POL-003",
     "open_ticket": "POL-004",
     "escalate": "POL-005",
@@ -292,9 +293,14 @@ FALLBACK_POLICY_KEYWORDS = [
 ]
 
 
+def topic_policy_id(text: str) -> str | None:
+    """doc_id of the policy whose topic the text names explicitly, if any."""
+    lowered = text.lower()
+    return next((d for keyword, d in FALLBACK_POLICY_KEYWORDS if keyword in lowered), None)
+
+
 def _offline_fallback_policy(query: str, application: str | None = None):
-    text = f"{query} {application or ''}".lower()
-    doc_id = next((d for keyword, d in FALLBACK_POLICY_KEYWORDS if keyword in text), None)
+    doc_id = topic_policy_id(f"{query} {application or ''}")
     return policy_by_id(doc_id) if doc_id else None
 
 
@@ -482,9 +488,23 @@ def decide_action(state: AgentState) -> dict:
     except Exception:
         pass
 
-    # No policy matched the request: cite the policy that governs the chosen action instead.
-    policy = state.policy_result or policy_by_id(POLICY_BY_ACTION.get(action_type.value, ""))
-    return {"action_proposal": proposal, "policy_result": policy}
+    return {"action_proposal": proposal, "policy_result": _citation_for(action_type, state)}
+
+
+def _citation_for(action_type: ActionType, state: AgentState):
+    """Policy cited for the chosen action (contract section 5, citation rule).
+
+    Policy answers cite the semantic match. Actions with a governing policy cite the
+    policy the request names explicitly, otherwise the governing one: the nearest semantic match is
+    not evidence for them, since with real embeddings an unrelated policy can rank first.
+    """
+    governing = POLICY_BY_ACTION.get(action_type.value)
+    if governing is None:
+        return state.policy_result
+    doc_id = topic_policy_id(_user_text(state)) or governing
+    if state.policy_result and state.policy_result.doc_id == doc_id:
+        return state.policy_result
+    return policy_by_id(doc_id) or state.policy_result
 
 
 # langgraph 0.2.45 rejects empty updates, so unchanged nodes return the proposal as is.

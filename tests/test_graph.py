@@ -15,7 +15,7 @@ from src.agent.graph import (
     reply,
     start,
 )
-from src.agent.models import ActionProposal, ActionStatus, ActionType, AgentState
+from src.agent.models import ActionProposal, ActionStatus, ActionType, AgentState, PolicyResult
 from src.db.checkpointer import PostgresSaver
 from src.db.connection import get_pooled_connection, is_postgres_available
 
@@ -183,6 +183,37 @@ def test_outage_without_matching_policy_cites_outage_policy(graph):
     assert result["action_proposal"].action_type == ActionType.LINK_OUTAGE
     assert result["policy_result"].doc_id == "POL-003"
     assert "POL-003" in result["final_response"]
+
+
+UNRELATED_POLICY = PolicyResult(
+    text="Employees connecting from abroad must notify IT.", doc_id="POL-008",
+    effective_date="2026-01-10", source="POL-008_remote_work_and_travel_security.md",
+)
+
+
+@pytest.mark.parametrize(
+    ("request_text", "expected_action", "expected_doc"),
+    [
+        ("My outgoing emails in Email & Calendar are stuck in the outbox.", ActionType.LINK_OUTAGE, "POL-003"),
+        ("I need a Docker Desktop license installed.", ActionType.OPEN_TICKET, "POL-004"),
+        ("I can't connect to the VPN, can you reset my access?", ActionType.LINK_OUTAGE, "POL-001"),
+        ("I locked myself out of the ERP System after typing my password wrong.", ActionType.RESET_CREDENTIALS, "POL-001"),
+    ],
+)
+def test_action_citation_ignores_unrelated_semantic_match(graph, monkeypatch, request_text, expected_action, expected_doc):
+    """With real embeddings an unrelated policy can rank first (EVAL-06, EVAL-09); actions cite the
+    policy the request names, otherwise the policy that governs them."""
+    monkeypatch.setattr(nodes, "knowledge_retrieve_policy", lambda query, app=None: UNRELATED_POLICY)
+    result = start(graph, new_config(), request_text + AT_DESK)
+    assert result["action_proposal"].action_type == expected_action
+    assert result["policy_result"].doc_id == expected_doc
+
+
+def test_policy_answer_keeps_semantic_match(graph, monkeypatch):
+    monkeypatch.setattr(nodes, "knowledge_retrieve_policy", lambda query, app=None: UNRELATED_POLICY)
+    result = start(graph, new_config(EMP02), "How early must I notify IT before working abroad?")
+    assert result["action_proposal"].action_type == ActionType.ANSWER_POLICY
+    assert result["policy_result"].doc_id == "POL-008"
 
 
 def test_extract_fields_missing_employee_identifies_and_asks(graph):
