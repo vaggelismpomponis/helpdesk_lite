@@ -1,14 +1,15 @@
 """Graph nodes. Each one is small and returns a partial update of AgentState.
 
-extract_fields and decide_action use mock rules for now; the LLM and the real tools come later.
+Wired to real Knowledge tools (retrieve_policy via pgvector, check_graph via Neo4j).
 """
 
+import json
+from pathlib import Path
 import re
 import uuid
 
 from langchain_core.runnables import RunnableConfig
 
-from src.agent import mocks
 from src.agent.models import (
     STATE_CHANGING_ACTIONS,
     ActionProposal,
@@ -17,6 +18,49 @@ from src.agent.models import (
     AgentState,
     ExtractedFields,
 )
+from src.knowledge.tools import (
+    check_graph as knowledge_check_graph,
+    retrieve_policy as knowledge_retrieve_policy,
+)
+
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+_GRAPH_SEED_PATH = DATA_DIR / "graph_seed.json"
+_SEED_DATA = (
+    json.loads(_GRAPH_SEED_PATH.read_text(encoding="utf-8"))
+    if _GRAPH_SEED_PATH.exists()
+    else {"applications": [], "services": [], "employees": []}
+)
+
+
+def find_application(text: str) -> str | None:
+    """Canonical application name mentioned in the text."""
+    lowered = text.lower()
+    for app in _SEED_DATA["applications"]:
+        aliases = {app["name"], app["name"].removeprefix("Corporate ")}
+        if any(re.search(rf"\b{re.escape(a.lower())}\b", lowered) for a in aliases):
+            return app["name"]
+    for srv in _SEED_DATA["services"]:
+        if re.search(rf"\b{re.escape(srv['name'].lower())}\b", lowered):
+            return srv["name"]
+    if "docker desktop" in lowered or "docker" in lowered:
+        return "Docker Desktop"
+    return None
+
+
+def find_employee(email: str | None = None, text: str | None = None) -> str | None:
+    """Resolve employee identity from session email or message text."""
+    if email:
+        match = next((e["name"] for e in _SEED_DATA["employees"] if e["email"] == email), None)
+        if match:
+            return match
+    if text:
+        lowered = text.lower()
+        for emp in _SEED_DATA["employees"]:
+            email_match = emp["email"].lower()
+            name_match = emp["name"].lower()
+            if email_match in lowered or re.search(rf"\b{re.escape(name_match)}\b", lowered):
+                return emp["name"]
+    return None
 
 QUESTION_WORDS = ("what", "how", "do", "does", "is", "are", "can", "which", "when", "where", "who")
 REQUEST_PREFIXES = ("can you", "could you", "would you", "will you", "can i get", "please")
@@ -96,10 +140,10 @@ def extract_fields(state: AgentState, config: RunnableConfig) -> dict:
 
     # 1. Resolve employee: session config takes precedence, fallback to message text
     user_email = config.get("configurable", {}).get("user_email")
-    employee = mocks.find_employee(email=user_email, text=text)
+    employee = find_employee(email=user_email, text=text)
 
     # 2. Resolve application: match against known applications and aliases
-    application = mocks.find_application(text)
+    application = find_application(text)
 
     # 3. Resolve symptom: extract observed issue without guessing
     symptom = _extract_symptom(text, application=application, employee=employee)
@@ -137,12 +181,24 @@ def ask_clarification(state: AgentState) -> dict:
 
 def retrieve_policy(state: AgentState) -> dict:
     fields = state.extracted_fields
-    return {"policy_result": mocks.retrieve_policy(fields.symptom or "", fields.application)}
+    text = _user_text(state)
+    query = fields.symptom or text
+    if not query.strip():
+        return {"policy_result": None}
+
+    # Avoid prepending application when the query is about credentials/passwords,
+    # so semantic search returns the credential reset policy instead of app docs.
+    app = (
+        None
+        if any(w in query.lower() for w in ("password", "credential", "reset", "lockout", "locked"))
+        else fields.application
+    )
+    return {"policy_result": knowledge_retrieve_policy(query, app)}
 
 
 def check_graph(state: AgentState) -> dict:
     application = state.extracted_fields.application
-    return {"graph_result": mocks.check_graph(application) if application else None}
+    return {"graph_result": knowledge_check_graph(application) if application else None}
 
 
 def _choose_action(state: AgentState) -> tuple[ActionType, str]:
