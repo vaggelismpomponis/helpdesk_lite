@@ -161,15 +161,19 @@ def format_approval_card(
 
 def build_approval_actions(action_id: str, thread_id: str) -> list[cl.Action]:
     """Create Approve and Reject buttons bound to action_id and thread_id."""
+    import json
+
+    approve_data = json.dumps({"decision": "approve", "action_id": action_id, "thread_id": thread_id})
+    reject_data = json.dumps({"decision": "reject", "action_id": action_id, "thread_id": thread_id})
     return [
         cl.Action(
             name="approve_action",
-            payload={"decision": "approve", "action_id": action_id, "thread_id": thread_id},
+            value=approve_data,
             label="✅ Approve",
         ),
         cl.Action(
             name="reject_action",
-            payload={"decision": "reject", "action_id": action_id, "thread_id": thread_id},
+            value=reject_data,
             label="❌ Reject",
         ),
     ]
@@ -223,7 +227,12 @@ async def _stream_graph_with_steps(inputs: Optional[dict[str, Any]], config: dic
 
 async def _restore_or_greet(thread_id: str, *, is_manual_resume: bool = False) -> None:
     """Inspect checkpoint for thread_id and either restore paused state or greet the user."""
-    config = config_for(thread_id, user_email=cl.user_session.get("user_email"))
+    config = config_for(
+        thread_id,
+        user_email=cl.user_session.get("user_email"),
+        tags=["chainlit"],
+        metadata={"source": "chainlit"},
+    )
     try:
         state = await cl.make_async(graph.get_state)(config)
     except Exception as exc:
@@ -288,7 +297,12 @@ async def on_message(message: cl.Message) -> None:
 
     thread_id = cl.user_session.get("thread_id") or cl.context.session.id
     cl.user_session.set("thread_id", thread_id)
-    config = config_for(thread_id, user_email=cl.user_session.get("user_email"))
+    config = config_for(
+        thread_id,
+        user_email=cl.user_session.get("user_email"),
+        tags=["chainlit"],
+        metadata={"source": "chainlit"},
+    )
 
     try:
         wait_reason = await cl.make_async(pending)(graph, config)
@@ -335,13 +349,33 @@ async def on_message(message: cl.Message) -> None:
 
 async def _handle_approval_decision(action: cl.Action, approved: bool) -> None:
     """Process Approve/Reject button clicks with double-click protection and error handling."""
-    payload = action.payload or {}
+    payload = getattr(action, "payload", None)
+    if not payload and hasattr(action, "value") and action.value:
+        try:
+            import json
+
+            payload = json.loads(action.value) if isinstance(action.value, str) else action.value
+        except Exception:
+            payload = {"action_id": str(action.value)}
+    payload = payload or {}
     action_id = payload.get("action_id", "")
-    thread_id = payload.get("thread_id") or cl.user_session.get("thread_id") or cl.context.session.id
+    thread_id = payload.get("thread_id")
+    if not thread_id:
+        try:
+            thread_id = cl.user_session.get("thread_id") or cl.context.session.id
+        except Exception:
+            thread_id = "default_thread"
+
     lock = _get_lock(action_id or thread_id)
 
     async with lock:
-        approval_msg = cl.user_session.get(f"approval_msg:{action_id}") if action_id else None
+        approval_msg = None
+        if action_id:
+            try:
+                approval_msg = cl.user_session.get(f"approval_msg:{action_id}")
+            except Exception:
+                approval_msg = None
+
         if approval_msg is not None:
             try:
                 await approval_msg.remove_actions()
@@ -352,7 +386,19 @@ async def _handle_approval_decision(action: cl.Action, approved: bool) -> None:
         except Exception:
             pass
 
-        config = config_for(thread_id, user_email=cl.user_session.get("user_email"))
+        user_email = None
+        try:
+            user_email = cl.user_session.get("user_email")
+        except Exception:
+            pass
+
+        config = config_for(
+            thread_id,
+            user_email=user_email,
+            action_id=action_id or None,
+            tags=["chainlit", "approval"],
+            metadata={"source": "chainlit", "action_id": action_id} if action_id else {"source": "chainlit"},
+        )
 
         try:
             wait_reason = await cl.make_async(pending)(graph, config)

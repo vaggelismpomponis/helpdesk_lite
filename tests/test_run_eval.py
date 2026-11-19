@@ -69,3 +69,46 @@ def test_langsmith_adapter_passes_run_and_example_outputs():
 def test_dataset_name_default(monkeypatch):
     monkeypatch.delenv("LANGSMITH_DATASET", raising=False)
     assert dataset_name() == DEFAULT_DATASET_NAME
+
+
+def test_config_for_attaches_tracing_metadata_and_tags():
+    from src.agent.graph import config_for
+
+    cfg = config_for(
+        "thread-abc",
+        "maria@nimbus.com",
+        action_id="act-123",
+        tags=["evaluation", "test"],
+        metadata={"scenario": "outage"},
+    )
+    assert cfg["configurable"]["thread_id"] == "thread-abc"
+    assert cfg["configurable"]["user_email"] == "maria@nimbus.com"
+    assert cfg["metadata"]["thread_id"] == "thread-abc"
+    assert cfg["metadata"]["action_id"] == "act-123"
+    assert cfg["metadata"]["user_email"] == "maria@nimbus.com"
+    assert cfg["metadata"]["scenario"] == "outage"
+    assert cfg["tags"] == ["evaluation", "test"]
+
+
+def test_run_example_attaches_metadata_and_tags_to_run_tree(graph, monkeypatch):
+    from langsmith.run_trees import RunTree
+
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
+    dummy_rt = RunTree(name="parent_test_run", run_type="chain")
+    monkeypatch.setattr("langsmith.run_helpers.get_current_run_tree", lambda: dummy_rt)
+
+    outcome, _ = run_example(
+        graph,
+        EXAMPLES["EVAL-07"]["inputs"],
+        example_id="EVAL-07",
+        tags=["evaluation", "EVAL-07"],
+        metadata={"priority": "high"},
+    )
+
+    assert outcome["action_type"] == "reset_credentials"
+    assert "thread_id" in dummy_rt.metadata
+    assert "action_id" in dummy_rt.metadata
+    assert dummy_rt.metadata["example_id"] == "EVAL-07"
+    assert dummy_rt.metadata["priority"] == "high"
+    assert "evaluation" in dummy_rt.tags
+    assert "EVAL-07" in dummy_rt.tags
