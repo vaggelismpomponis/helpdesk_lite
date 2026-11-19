@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: helpdesk_seed
-    command: ["python", "scripts/seed.py"]
+    command: [ "python", "scripts/seed.py" ]
     restart: "no"
     env_file:
       - path: .env
@@ -118,6 +118,7 @@ services:
       seed:
         condition: service_completed_successfully
     volumes:
+      - ./chainlit.md:/app/chainlit.md:ro
       - ./src:/app/src:ro
       - ./src/data:/app/data:ro
       - ./scripts:/app/scripts:ro

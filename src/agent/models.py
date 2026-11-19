@@ -45,17 +45,18 @@ class ExtractedFields(BaseModel):
     application: Optional[str] = Field(default=None, description="Name of the affected application or system")
     symptom: Optional[str] = Field(default=None, description="Observed symptom or error description")
     urgency: Optional[str] = Field(default=None, description="Urgency level (e.g. low, medium, high)")
+    office: Optional[str] = Field(default=None, description="Office the employee works from (e.g. Athens)")
+    device: Optional[str] = Field(default=None, description="Device the employee uses (e.g. MacBook Pro)")
 
     def missing_fields(self) -> List[str]:
-        """Returns the list of mandatory triage fields that are missing."""
-        missing: List[str] = []
-        if not self.employee:
-            missing.append("employee")
-        if not self.application:
-            missing.append("application")
-        if not self.symptom:
-            missing.append("symptom")
-        return missing
+        """Returns the list of mandatory triage fields that are missing.
+
+        Office and device must be confirmed before acting (POL-001 v2). The application is optional:
+        it is used for the outage check when named, but requests such as a new software license do
+        not concern a known application.
+        """
+        required = ("employee", "symptom", "office", "device")
+        return [name for name in required if not getattr(self, name)]
 
     def is_complete(self) -> bool:
         """Returns True only when all mandatory triage fields are present."""

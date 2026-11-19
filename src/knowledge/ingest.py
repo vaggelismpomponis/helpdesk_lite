@@ -65,7 +65,7 @@ def ingest() -> int:
             )
             for i, (c, v) in enumerate(zip(parts, vectors)):
                 conn.execute(
-                    "INSERT INTO policy_chunks VALUES (%s,%s,%s,%s,%s,%s,%s::vector)",
+                    "INSERT INTO policy_chunks (doc_id, effective_date, chunk_index, title, source, content, embedding) VALUES (%s,%s,%s,%s,%s,%s,%s::vector)",
                     (meta["doc_id"], meta["effective_date"], i, meta["title"], path.name, c, vec(v)),
                 )
     return len(docs)

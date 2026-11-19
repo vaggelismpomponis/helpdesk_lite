@@ -32,6 +32,75 @@ _SEED_DATA = (
 )
 
 
+OFFICES = sorted({e["office"] for e in _SEED_DATA["employees"] if "office" in e})
+DEVICES = sorted({e["device"] for e in _SEED_DATA["employees"] if "device" in e})
+
+# Policy that governs an action, cited when the request itself matched no policy.
+POLICY_BY_ACTION = {
+    "link_outage": "POL-003",
+    "open_ticket": "POL-004",
+    "escalate": "POL-005",
+}
+
+
+def _find_known(options: list[str], text: str) -> str | None:
+    lowered = text.lower()
+    return next((o for o in options if re.search(rf"\b{re.escape(o.lower())}\b", lowered)), None)
+
+
+def find_office(text: str) -> str | None:
+    """Office named in the text. Taken from the message only: the user must confirm it (POL-001)."""
+    return _find_known(OFFICES, text)
+
+
+def find_device(text: str) -> str | None:
+    """Device named in the text. Taken from the message only: the user must confirm it (POL-001)."""
+    return _find_known(DEVICES, text)
+
+
+def policy_by_id(doc_id: str):
+    """Latest version of a policy by doc_id, querying pgvector with fallback to policy files."""
+    if not doc_id:
+        return None
+    try:
+        from src.knowledge.common import pg
+        with pg() as conn:
+            row = conn.execute(
+                """
+                WITH latest AS (
+                    SELECT doc_id, max(effective_date) AS effective_date
+                    FROM policy_chunks WHERE doc_id = %s AND effective_date <= current_date GROUP BY doc_id
+                )
+                SELECT c.content, c.doc_id, c.effective_date, c.source
+                FROM policy_chunks c JOIN latest USING (doc_id, effective_date)
+                LIMIT 1;
+                """,
+                (doc_id,),
+            ).fetchone()
+            if row:
+                from src.knowledge.models import PolicyResult
+                return PolicyResult(text=row[0], doc_id=row[1], effective_date=row[2].isoformat(), source=row[3])
+    except Exception:
+        pass
+
+    # Fallback to local files if database is unreachable
+    versions = sorted(DATA_DIR.glob(f"policies/{doc_id}_*.md"))
+    if versions:
+        path = versions[-1]
+        match = re.match(r"---\r?\n(.*?)\r?\n---\r?\n(.*)", path.read_text(encoding="utf-8"), re.S)
+        if match:
+            lines = (line.split(":", 1) for line in match[1].splitlines() if ":" in line)
+            meta = {k.strip(): v.strip().strip('"') for k, v in lines}
+            from src.knowledge.models import PolicyResult
+            return PolicyResult(
+                text=match[2][:800].strip(),
+                doc_id=meta.get("doc_id", doc_id),
+                effective_date=meta.get("effective_date", ""),
+                source=path.name,
+            )
+    return None
+
+
 def find_application(text: str) -> str | None:
     """Canonical application name mentioned in the text."""
     lowered = text.lower()
@@ -69,8 +138,9 @@ CRITICAL_WORDS = ("critical", "production down", "data breach", "security incide
 CLARIFICATION_QUESTION = "Which application or system is affected?"
 FIELD_PROMPTS = {
     "employee": "who you are (name or work email)",
-    "application": "which application or system is affected",
     "symptom": "what is happening (the error or symptom)",
+    "office": "which office you are working from",
+    "device": "which device you are using",
 }
 
 SYMPTOM_INDICATORS = (
@@ -106,7 +176,9 @@ def is_question(text: str) -> bool:
     return bool(words) and words[0] in QUESTION_WORDS and lowered.endswith("?")
 
 
-def _extract_symptom(text: str, application: str | None = None, employee: str | None = None) -> str | None:
+def _extract_symptom(
+    text: str, application: str | None = None, employee: str | None = None, *context: str | None
+) -> str | None:
     """Extract observed symptom or error description without guessing or hallucinating."""
     raw = text.strip()
     if not raw:
@@ -123,10 +195,16 @@ def _extract_symptom(text: str, application: str | None = None, employee: str | 
         cleaned = re.sub(rf"\b{re.escape(employee.lower())}\b", " ", cleaned)
     if application:
         cleaned = re.sub(rf"\b{re.escape(application.lower())}\b", " ", cleaned)
+    for known in context:  # office and device are context, not a symptom
+        if known:
+            cleaned = re.sub(rf"\b{re.escape(known.lower())}\b", " ", cleaned)
 
     cleaned_words = [
         w for w in re.findall(r"\b[a-z0-9]+\b", cleaned)
-        if w not in ("on", "in", "from", "at", "the", "a", "an", "for", "with", "to", "and", "system", "app")
+        if w not in (
+            "on", "in", "from", "at", "the", "a", "an", "for", "with", "to", "and", "system", "app",
+            "office", "my", "using", "working", "work",
+        )
     ]
     if len(cleaned_words) < 3:
         return None
@@ -145,21 +223,25 @@ def extract_fields(state: AgentState, config: RunnableConfig) -> dict:
     # 2. Resolve application: match against known applications and aliases
     application = find_application(text)
 
-    # 3. Resolve symptom: extract observed issue without guessing
-    symptom = _extract_symptom(text, application=application, employee=employee)
+    # 3. Resolve office and device: from the message only, the user must confirm them (POL-001)
+    office, device = find_office(text), find_device(text)
 
-    # 4. Resolve urgency: optional triage field
+    # 4. Resolve symptom: extract observed issue without guessing
+    symptom = _extract_symptom(text, application, employee, office, device)
+
+    # 5. Resolve urgency: optional triage field
     urgency = "high" if any(w in lowered for w in ("urgent", "asap", "critical", "emergency", "production down")) else None
 
-    # Construct Pydantic model with optional fields
     fields = ExtractedFields(
         employee=employee,
         application=application,
         symptom=symptom,
         urgency=urgency,
+        office=office,
+        device=device,
     )
 
-    # 5. Enforce strict "Ask if Missing" rule:
+    # 6. Enforce strict "Ask if Missing" rule:
     # Policy questions do not need triage fields; incident requests require all mandatory fields.
     if is_question(text):
         missing = []
@@ -179,6 +261,40 @@ def ask_clarification(state: AgentState) -> dict:
     return {"messages": [*state.messages, {"role": "assistant", "content": state.clarification_question}]}
 
 
+FALLBACK_POLICY_KEYWORDS = [
+    ("wi-fi", "POL-016"),
+    ("travel", "POL-008"),
+    ("cloud storage", "POL-012"),
+    ("password", "POL-001"),
+    ("reset", "POL-001"),
+    ("locked", "POL-001"),
+    ("credential", "POL-001"),
+    ("vpn", "POL-002"),
+    ("license", "POL-004"),
+    ("install", "POL-010"),
+]
+
+
+def _offline_fallback_policy(query: str, application: str | None = None):
+    text = f"{query} {application or ''}".lower()
+    doc_id = next((d for keyword, d in FALLBACK_POLICY_KEYWORDS if keyword in text), None)
+    return policy_by_id(doc_id) if doc_id else None
+
+
+def _offline_fallback_graph(application: str):
+    app = next((a for a in _SEED_DATA["applications"] if a["name"] == application), None)
+    deps = app["depends_on_services"] if app else []
+    services_map = {s["service_id"]: s["name"] for s in _SEED_DATA["services"]}
+    open_outages = {o["service_id"] for o in _SEED_DATA.get("outages", []) if o.get("status") == "OPEN"}
+    from src.knowledge.models import GraphResult
+    return GraphResult(
+        application=application,
+        found=app is not None,
+        dependencies=[services_map[s] for s in deps if s in services_map],
+        active_outages=[services_map[s] for s in deps if s in open_outages and s in services_map],
+    )
+
+
 def retrieve_policy(state: AgentState) -> dict:
     fields = state.extracted_fields
     text = _user_text(state)
@@ -193,12 +309,20 @@ def retrieve_policy(state: AgentState) -> dict:
         if any(w in query.lower() for w in ("password", "credential", "reset", "lockout", "locked"))
         else fields.application
     )
-    return {"policy_result": knowledge_retrieve_policy(query, app)}
+    try:
+        return {"policy_result": knowledge_retrieve_policy(query, app)}
+    except Exception:
+        return {"policy_result": _offline_fallback_policy(query, app)}
 
 
 def check_graph(state: AgentState) -> dict:
     application = state.extracted_fields.application
-    return {"graph_result": knowledge_check_graph(application) if application else None}
+    if not application:
+        return {"graph_result": None}
+    try:
+        return {"graph_result": knowledge_check_graph(application)}
+    except Exception:
+        return {"graph_result": _offline_fallback_graph(application)}
 
 
 def _choose_action(state: AgentState) -> tuple[ActionType, str]:
@@ -230,7 +354,9 @@ def decide_action(state: AgentState) -> dict:
         requires_approval=needs_approval,
         rationale=rationale,
     )
-    return {"action_proposal": proposal}
+    # No policy matched the request: cite the policy that governs the chosen action instead.
+    policy = state.policy_result or policy_by_id(POLICY_BY_ACTION.get(action_type.value, ""))
+    return {"action_proposal": proposal, "policy_result": policy}
 
 
 # langgraph 0.2.45 rejects empty updates, so unchanged nodes return the proposal as is.
