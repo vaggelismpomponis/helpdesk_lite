@@ -109,7 +109,12 @@ def find_application(text: str) -> str | None:
         if any(re.search(rf"\b{re.escape(a.lower())}\b", lowered) for a in aliases):
             return app["name"]
     for srv in _SEED_DATA["services"]:
-        if re.search(rf"\b{re.escape(srv['name'].lower())}\b", lowered):
+        aliases = {srv["name"]}
+        if "sso" in srv["name"].lower():
+            aliases.update({"sso", "identity provider"})
+        if "smtp" in srv["name"].lower():
+            aliases.update({"smtp", "smtp relay"})
+        if any(re.search(rf"\b{re.escape(a.lower())}\b", lowered) for a in aliases):
             return srv["name"]
     if "docker desktop" in lowered or "docker" in lowered:
         return "Docker Desktop"
@@ -282,17 +287,64 @@ def _offline_fallback_policy(query: str, application: str | None = None):
 
 
 def _offline_fallback_graph(application: str):
-    app = next((a for a in _SEED_DATA["applications"] if a["name"] == application), None)
-    deps = app["depends_on_services"] if app else []
+    from src.knowledge.models import GraphResult, Outage
+
     services_map = {s["service_id"]: s["name"] for s in _SEED_DATA["services"]}
     open_outages = {o["service_id"] for o in _SEED_DATA.get("outages", []) if o.get("status") == "OPEN"}
-    from src.knowledge.models import GraphResult
-    return GraphResult(
-        application=application,
-        found=app is not None,
-        dependencies=[services_map[s] for s in deps if s in services_map],
-        active_outages=[services_map[s] for s in deps if s in open_outages and s in services_map],
+
+    app = next((a for a in _SEED_DATA["applications"] if a["name"].lower() == application.lower()), None)
+    if app:
+        deps = app.get("depends_on_services", [])
+        active = [services_map[s] for s in deps if s in open_outages and s in services_map]
+        outages = [
+            Outage(
+                outage_id=o["outage_id"],
+                service=services_map.get(o["service_id"], o["service_id"]),
+                title=o.get("title", ""),
+                severity=o.get("severity", ""),
+                started_at=o.get("started_at", ""),
+                summary=o.get("summary", ""),
+            )
+            for o in _SEED_DATA.get("outages", [])
+            if o.get("status") == "OPEN" and o.get("service_id") in deps
+        ]
+        return GraphResult(
+            application=app["name"],
+            found=True,
+            dependencies=[services_map[s] for s in deps if s in services_map],
+            active_outages=sorted(active),
+            outages=outages,
+        )
+
+    # Direct backend service match
+    srv = next(
+        (s for s in _SEED_DATA["services"] if s["name"].lower() == application.lower() or application.lower() in s["name"].lower()),
+        None,
     )
+    if srv:
+        is_open = srv["service_id"] in open_outages
+        direct_outages = [srv["name"]] if is_open else []
+        outages = [
+            Outage(
+                outage_id=o["outage_id"],
+                service=srv["name"],
+                title=o.get("title", ""),
+                severity=o.get("severity", ""),
+                started_at=o.get("started_at", ""),
+                summary=o.get("summary", ""),
+            )
+            for o in _SEED_DATA.get("outages", [])
+            if o.get("status") == "OPEN" and o.get("service_id") == srv["service_id"]
+        ]
+        return GraphResult(
+            application=srv["name"],
+            found=True,
+            dependencies=[srv["name"]],
+            active_outages=direct_outages,
+            outages=outages,
+        )
+
+    return GraphResult(application=application, found=False)
 
 
 def retrieve_policy(state: AgentState) -> dict:
@@ -328,8 +380,21 @@ def check_graph(state: AgentState) -> dict:
 def _choose_action(state: AgentState) -> tuple[ActionType, str]:
     """Decision Precedence Matrix (contract section 5); clarification is handled by routing."""
     text = _user_text(state).lower()
+
+    # 1. Outage check: Strict rule: if a dependent service has an active outage,
+    # the assistant MUST propose link_outage (NEVER credential reset).
     if state.graph_result and state.graph_result.has_active_outage:
-        return ActionType.LINK_OUTAGE, f"Active outage on {', '.join(state.graph_result.active_outages)}"
+        outages_str = ", ".join(state.graph_result.active_outages)
+        app_name = state.extracted_fields.application or state.graph_result.application or "the affected application"
+        if any(w in text for w in RESET_WORDS):
+            rationale = (
+                f"Active outage on dependent service ({outages_str}) affecting {app_name}. "
+                "Credential reset is inhibited; proposing link to outage instead."
+            )
+        else:
+            rationale = f"Active outage on {outages_str}"
+        return ActionType.LINK_OUTAGE, rationale
+
     if state.policy_result and is_question(_user_text(state)):
         return ActionType.ANSWER_POLICY, f"Policy {state.policy_result.doc_id} answers the question"
     if any(w in text for w in RESET_WORDS):
@@ -342,13 +407,22 @@ def _choose_action(state: AgentState) -> tuple[ActionType, str]:
 def decide_action(state: AgentState) -> dict:
     action_type, rationale = _choose_action(state)
     needs_approval = action_type in STATE_CHANGING_ACTIONS
+
+    parameters = {
+        "employee": state.extracted_fields.employee,
+        "application": state.extracted_fields.application,
+    }
+    if action_type == ActionType.LINK_OUTAGE and state.graph_result:
+        parameters["active_outages"] = state.graph_result.active_outages
+        if state.graph_result.outages:
+            parameters["outage_id"] = state.graph_result.outages[0].outage_id
+        elif state.graph_result.active_outages:
+            parameters["outage_service"] = state.graph_result.active_outages[0]
+
     proposal = ActionProposal(
         action_id=str(uuid.uuid4()),
         action_type=action_type,
-        parameters={
-            "employee": state.extracted_fields.employee,
-            "application": state.extracted_fields.application,
-        },
+        parameters=parameters,
         # Informational actions need no human approval, so they start approved.
         status=ActionStatus.PENDING if needs_approval else ActionStatus.APPROVED,
         requires_approval=needs_approval,

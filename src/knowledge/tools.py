@@ -26,6 +26,16 @@ RETURN a.name AS application, collect(DISTINCT s.name) AS dependencies,
            severity: o.severity, started_at: o.started_at, summary: o.summary} END) AS outages
 """
 
+SERVICE_CYPHER = """
+MATCH (s:Service) WHERE toLower(s.name) CONTAINS toLower($name)
+WITH s ORDER BY CASE WHEN toLower(s.name) = toLower($name) THEN 0 ELSE 1 END, s.name LIMIT 1
+OPTIONAL MATCH (s)-[:HAS_OUTAGE]->(o:Outage {status: 'OPEN'})
+RETURN s.name AS application, [s.name] AS dependencies,
+       collect(DISTINCT CASE WHEN o IS NULL THEN NULL ELSE {
+           outage_id: o.outage_id, service: s.name, title: o.title,
+           severity: o.severity, started_at: o.started_at, summary: o.summary} END) AS outages
+"""
+
 
 def retrieve_policy(query: str, application: str | None = None) -> PolicyResult | None:
     """Best-matching chunk of the current version of each policy; None if nothing is indexed.
@@ -40,12 +50,14 @@ def retrieve_policy(query: str, application: str | None = None) -> PolicyResult 
 
 
 def check_graph(application: str) -> GraphResult:
-    """Dependencies and active outages of an application; found=False if it is unknown."""
+    """Dependencies and active outages of an application or direct service; found=False if unknown."""
     name = application.strip()
     if not name:
         return GraphResult(application=application, found=False)
     with neo4j_driver() as driver:
         records, _, _ = driver.execute_query(GRAPH_CYPHER, name=name)
+        if not records:
+            records, _, _ = driver.execute_query(SERVICE_CYPHER, name=name)
     if not records:
         return GraphResult(application=name, found=False)
     r = records[0]
