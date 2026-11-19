@@ -261,6 +261,7 @@ git push origin --delete feature/ticket-creation
 
 - [ ] Το branch βασίζεται στο πρόσφατο `develop`
 - [ ] Ο κώδικας τρέχει και τα tests περνούν
+- [ ] **Έλεγχος conflicts:** Έχει γίνει έλεγχος με το remote target branch (`git fetch origin` και `git merge-tree --write-tree HEAD origin/develop`) και δεν υπάρχει κανένα conflict
 - [ ] Δεν υπάρχουν περιττά αρχεία ή secrets (κωδικοί, tokens)
 - [ ] Τα commit messages είναι κατανοητά
 
