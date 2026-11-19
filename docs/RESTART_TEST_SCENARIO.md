@@ -117,10 +117,7 @@ Not run: blocked by the approval-button error described above.
    and execution goes through the idempotent helpers in `src/db/idempotency.py`. Confirmed in the run above.
 2. **Resolved by #88: the README is now accurate.** The section "Container Restart & Idempotency Testing"
    says actions are tracked in `audit_log` and `tickets`, which was not true before #88.
-3. **`decide()` has no guard** (still present after #88). Calling `decide(graph, config, approved=True)` on a finished thread changes the
-   saved status from `executed` back to `approved` (nothing executes, but the record is wrong). The UI is
-   protected because `src/app.py` checks `pending(...) == "approval"` first; other callers are not.
-   → Workflow: return early in `decide()` when the graph is not waiting for approval.
+3. **Resolved: `decide()` guarded against state regression.** `decide()` checks `pending(graph, config) == "approval"` and returns early on finished or non-approval threads without modifying the state. Prevents state regressions (executed -> approved) across replayed decisions. Verified in `tests/test_restart_scenario.py`.
 4. **Checkpoint history stores writes as text.** `src/db/checkpointer.py` saves the values in
    `metadata["writes"]` as their printed form, not as objects. The state itself is saved correctly. This only
    matters to code that reads the history, like this test, which reads statuses from the saved state instead.
@@ -131,5 +128,6 @@ Not run: blocked by the approval-button error described above.
 | Role | Who | Status | Date |
 |---|---|---|---|
 | Quality | @VickyMil-ai | Procedure A executed | 2026-11-19 |
-| Workflow | | | |
+| Platform | @vaggelismpomponis | PostgresSaver & audit_log verification | 2026-11-19 |
+| Workflow | @vaggelismpomponis | Zero duplicate execution & decide guard verified | 2026-11-19 |
 | Interface | | Procedure B pending | |

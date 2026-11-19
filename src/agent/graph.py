@@ -118,7 +118,13 @@ def reply(graph: CompiledStateGraph, config: dict, answer: str) -> dict:
 
 
 def decide(graph: CompiledStateGraph, config: dict, approved: bool) -> dict:
-    """Resume before human_approval with the operator's decision."""
+    """Resume before human_approval with the operator's decision.
+
+    Guarded: only processes decisions while the graph is waiting for approval.
+    Prevents lifecycle regressions (e.g. executed -> approved) on replayed decisions.
+    """
+    if pending(graph, config) != "approval":
+        return graph.get_state(config).values
     proposal = graph.get_state(config).values["action_proposal"]
     status = ActionStatus.APPROVED if approved else ActionStatus.REJECTED
     graph.update_state(config, {"action_proposal": proposal.model_copy(update={"status": status})})
