@@ -1,6 +1,6 @@
 # Οδηγός Git για το HelpDesk_Lite
 
-Remote repository: `https://codeberg.org/ebomponis001/HelpDesk_Lite.git`
+Remote repository: `https://github.com/vaggelismpomponis/helpdesk_lite.git`
 
 ## 1. Βασικές έννοιες
 
@@ -9,7 +9,7 @@ Remote repository: `https://codeberg.org/ebomponis001/HelpDesk_Lite.git`
 | Repository (repo) | Ο φάκελος του project μαζί με το ιστορικό αλλαγών |
 | Commit | Ένα αποθηκευμένο «στιγμιότυπο» των αλλαγών |
 | Branch | Ξεχωριστή γραμμή ανάπτυξης |
-| Remote (`origin`) | Το repository στο Codeberg |
+| Remote (`origin`) | Το repository στο GitHub |
 | Pull Request (PR) | Αίτημα για συγχώνευση ενός branch σε άλλο, με review |
 
 ## 2. Αρχική ρύθμιση
@@ -19,8 +19,8 @@ git config --global user.name "Το Όνομά σου"
 git config --global user.email "email@example.com"
 
 # Κλωνοποίηση του repo (αν δεν υπάρχει τοπικά)
-git clone https://codeberg.org/ebomponis001/HelpDesk_Lite.git
-cd HelpDesk_Lite
+git clone https://github.com/vaggelismpomponis/helpdesk_lite.git
+cd helpdesk_lite
 
 # Έλεγχος remote
 git remote -v
@@ -261,6 +261,7 @@ git push origin --delete feature/ticket-creation
 
 - [ ] Το branch βασίζεται στο πρόσφατο `develop`
 - [ ] Ο κώδικας τρέχει και τα tests περνούν
+- [ ] **Έλεγχος conflicts:** Έχει γίνει έλεγχος με το remote target branch (`git fetch origin` και `git merge-tree --write-tree HEAD origin/develop`) και δεν υπάρχει κανένα conflict
 - [ ] Δεν υπάρχουν περιττά αρχεία ή secrets (κωδικοί, tokens)
 - [ ] Τα commit messages είναι κατανοητά
 
