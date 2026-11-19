@@ -412,3 +412,75 @@ def test_live_retrieve_policy_and_check_graph_state_transitions(graph):
     assert proposal.action_type == ActionType.LINK_OUTAGE
     assert proposal.requires_approval is False
 
+
+# ==============================================================================
+# Step 9 / Issue #29: Decision Rules (Active Outage -> Link to Outage)
+# ==============================================================================
+
+
+def test_decision_rules_active_outage_inhibits_credential_reset(graph):
+    """Enforce strict rule: active outage on dependent service MUST propose link_outage (NEVER reset_credentials)."""
+    config = new_config()
+    result = start(graph, config, "Corporate VPN credentials not working, please reset my password" + AT_DESK)
+    proposal = result["action_proposal"]
+
+    # Acceptance criteria: active outage triggers link to outage
+    assert proposal.action_type == ActionType.LINK_OUTAGE
+    # Acceptance criteria: credential reset is strictly inhibited
+    assert proposal.action_type != ActionType.RESET_CREDENTIALS
+    assert not proposal.requires_approval
+    assert proposal.status == ActionStatus.APPROVED
+    assert "inhibited" in proposal.rationale.lower()
+    assert "Identity Provider (SSO)" in proposal.rationale
+    assert "Identity Provider (SSO)" in result["graph_result"].active_outages
+    assert "link_outage" in result["final_response"]
+
+
+def test_decision_rules_multiple_applications_in_dependency_tree(graph):
+    """Evaluate service dependency tree across different applications sharing degraded service."""
+    # Finance Portal depends on SRV-01 (Identity Provider (SSO) with OPEN outage)
+    config1 = new_config()
+    res1 = start(graph, config1, "Finance Portal login failed, please reset my password" + AT_DESK)
+    assert res1["action_proposal"].action_type == ActionType.LINK_OUTAGE
+    assert res1["action_proposal"].action_type != ActionType.RESET_CREDENTIALS
+
+    # GitHub Enterprise also depends on SRV-01 (Identity Provider (SSO))
+    config2 = new_config()
+    res2 = start(graph, config2, "GitHub Enterprise account locked out, need password reset" + AT_DESK)
+    assert res2["action_proposal"].action_type == ActionType.LINK_OUTAGE
+    assert res2["action_proposal"].action_type != ActionType.RESET_CREDENTIALS
+
+
+def test_decision_rules_healthy_service_allows_credential_reset(graph):
+    """When dependent services are operational (no outages), credential reset proceeds normally with approval."""
+    # ERP System depends on SRV-03 (PostgreSQL) and SRV-07 (API Gateway), neither has an active outage
+    config = new_config()
+    result = start(graph, config, "My ERP System password expired, please reset my credentials" + AT_DESK)
+    proposal = result["action_proposal"]
+
+    assert proposal.action_type == ActionType.RESET_CREDENTIALS
+    assert proposal.requires_approval is True
+    assert proposal.status == ActionStatus.PENDING
+    assert pending(graph, config) == "approval"
+
+
+def test_decision_rules_direct_service_outage(graph):
+    """Direct mention of degraded service triggers link to outage."""
+    config = new_config()
+    result = start(graph, config, "Identity Provider (SSO) is broken, please reset my password" + AT_DESK)
+    proposal = result["action_proposal"]
+
+    assert proposal.action_type == ActionType.LINK_OUTAGE
+    assert proposal.requires_approval is False
+
+
+def test_decision_rules_outage_proposal_parameters(graph):
+    """ActionProposal parameters contain outage tracking metadata."""
+    config = new_config()
+    result = start(graph, config, "I cannot connect to Corporate VPN, reset my password" + AT_DESK)
+    params = result["action_proposal"].parameters
+
+    assert "Identity Provider (SSO)" in params.get("active_outages", [])
+    assert params.get("outage_id") == "OUT-2026-01"
+
+
