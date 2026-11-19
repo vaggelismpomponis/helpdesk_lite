@@ -1,6 +1,6 @@
 # Demo Script (10 minutes)
 
-**Issue:** #54 · **Owner:** Quality · **Presenters:** rotate per segment (#55)
+**Issue:** #54 · **Owner:** Quality · **Presenters:** rotate per segment, see [REHEARSAL_LOG.md](./REHEARSAL_LOG.md) (#55)
 
 The demo runs on the seeded stack from `docker compose up`. Every message below was run against it on
 2026-11-19 with `eval/demo_check.py` and gave the outcome described.
