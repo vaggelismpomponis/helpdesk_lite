@@ -164,8 +164,20 @@ GREETING_PATTERNS = [
     r"\bthis\s+is\b",
 ]
 
-# Stand-in for the Postgres action table until step 10 (idempotent execution).
+# In-memory execution cache for fast local lookup and fallback alongside PostgreSQL audit_log.
 EXECUTED_ACTION_IDS: set[str] = set()
+
+
+def _is_action_already_executed(action_id: str) -> bool:
+    """Check if action has already been executed in memory or in PostgreSQL audit_log."""
+    if action_id in EXECUTED_ACTION_IDS:
+        return True
+    try:
+        from src.db.idempotency import is_action_executed
+
+        return is_action_executed(action_id)
+    except Exception:
+        return False
 
 
 def _user_text(state: AgentState) -> str:
@@ -362,7 +374,10 @@ def retrieve_policy(state: AgentState) -> dict:
         else fields.application
     )
     try:
-        return {"policy_result": knowledge_retrieve_policy(query, app)}
+        policy = knowledge_retrieve_policy(query, app)
+        if policy is None:
+            policy = _offline_fallback_policy(query, app)
+        return {"policy_result": policy}
     except Exception:
         return {"policy_result": _offline_fallback_policy(query, app)}
 
@@ -409,9 +424,19 @@ def decide_action(state: AgentState) -> dict:
     needs_approval = action_type in STATE_CHANGING_ACTIONS
 
     parameters = {
-        "employee": state.extracted_fields.employee,
-        "application": state.extracted_fields.application,
+        "employee": state.extracted_fields.employee if state.extracted_fields else None,
+        "application": state.extracted_fields.application if state.extracted_fields else None,
     }
+    if state.extracted_fields:
+        if state.extracted_fields.symptom:
+            parameters["symptom"] = state.extracted_fields.symptom
+        if state.extracted_fields.urgency:
+            parameters["urgency"] = state.extracted_fields.urgency
+        if state.extracted_fields.office:
+            parameters["office"] = state.extracted_fields.office
+        if state.extracted_fields.device:
+            parameters["device"] = state.extracted_fields.device
+
     if action_type == ActionType.LINK_OUTAGE and state.graph_result:
         parameters["active_outages"] = state.graph_result.active_outages
         if state.graph_result.outages:
@@ -428,6 +453,25 @@ def decide_action(state: AgentState) -> dict:
         requires_approval=needs_approval,
         rationale=rationale,
     )
+
+    # Persist action proposal into PostgreSQL audit_log (idempotency & audit tracking)
+    thread_id = state.thread_id or "unknown_thread"
+    try:
+        from src.db.idempotency import record_action
+
+        record_action(
+            action_id=proposal.action_id,
+            thread_id=thread_id,
+            action_type=proposal.action_type.value,
+            employee=parameters.get("employee"),
+            application=parameters.get("application"),
+            status=proposal.status.value,
+            parameters=proposal.parameters,
+            rationale=proposal.rationale,
+        )
+    except Exception:
+        pass
+
     # No policy matched the request: cite the policy that governs the chosen action instead.
     policy = state.policy_result or policy_by_id(POLICY_BY_ACTION.get(action_type.value, ""))
     return {"action_proposal": proposal, "policy_result": policy}
@@ -440,21 +484,100 @@ def human_approval(state: AgentState) -> dict:
     """Runs after the operator's decision was written into action_proposal.status.
 
     Anything other than an explicit approval counts as a rejection.
+    Updates the action lifecycle status atomically in PostgreSQL audit_log.
     """
     proposal = state.action_proposal
-    if proposal.status != ActionStatus.APPROVED:
-        return {"action_proposal": proposal.model_copy(update={"status": ActionStatus.REJECTED})}
-    return {"action_proposal": proposal}
+    new_status = ActionStatus.APPROVED if proposal.status == ActionStatus.APPROVED else ActionStatus.REJECTED
+    updated_proposal = proposal if proposal.status == new_status else proposal.model_copy(update={"status": new_status})
+
+    thread_id = state.thread_id or "unknown_thread"
+    try:
+        from src.db.idempotency import record_action
+
+        record_action(
+            action_id=updated_proposal.action_id,
+            thread_id=thread_id,
+            action_type=updated_proposal.action_type.value,
+            employee=updated_proposal.parameters.get("employee"),
+            application=updated_proposal.parameters.get("application"),
+            status=updated_proposal.status.value,
+            parameters=updated_proposal.parameters,
+            rationale=updated_proposal.rationale,
+        )
+    except Exception:
+        pass
+
+    return {"action_proposal": updated_proposal}
 
 
 def execute_action(state: AgentState) -> dict:
     proposal = state.action_proposal
-    # Idempotency: never run an action twice, and never run one that is not approved.
-    if proposal.status == ActionStatus.EXECUTED or proposal.action_id in EXECUTED_ACTION_IDS:
+    # Idempotency pre-execution guard: never run an action twice across container restarts or replays.
+    if proposal.status == ActionStatus.EXECUTED or _is_action_already_executed(proposal.action_id):
+        EXECUTED_ACTION_IDS.add(proposal.action_id)
         return {"action_proposal": proposal.model_copy(update={"status": ActionStatus.EXECUTED})}
+
     if proposal.status != ActionStatus.APPROVED:
         return {"action_proposal": proposal}
-    EXECUTED_ACTION_IDS.add(proposal.action_id)  # mock side effect (ticket, reset, escalation)
+
+    def _do_execute(action_id: str):
+        if proposal.action_type == ActionType.OPEN_TICKET:
+            from src.db.idempotency import create_ticket_idempotent
+
+            emp = (
+                (state.extracted_fields and state.extracted_fields.employee)
+                or proposal.parameters.get("employee")
+                or "Unknown"
+            )
+            app = (
+                (state.extracted_fields and state.extracted_fields.application)
+                or proposal.parameters.get("application")
+                or "General IT"
+            )
+            sym = (
+                (state.extracted_fields and state.extracted_fields.symptom)
+                or proposal.parameters.get("symptom")
+                or "Unspecified issue"
+            )
+            urg = (
+                (state.extracted_fields and state.extracted_fields.urgency)
+                or proposal.parameters.get("urgency")
+                or "medium"
+            )
+            details = {
+                "parameters": proposal.parameters,
+                "rationale": proposal.rationale,
+            }
+            create_ticket_idempotent(
+                action_id=action_id,
+                employee=emp,
+                application=app,
+                symptom=sym,
+                urgency=urg,
+                details=details,
+            )
+
+    try:
+        from src.db.idempotency import execute_idempotent, record_action
+
+        thread_id = state.thread_id or "unknown_thread"
+        # Ensure action proposal is registered in audit_log as approved prior to atomic execution
+        record_action(
+            action_id=proposal.action_id,
+            thread_id=thread_id,
+            action_type=proposal.action_type.value,
+            employee=proposal.parameters.get("employee"),
+            application=proposal.parameters.get("application"),
+            status=ActionStatus.APPROVED.value,
+            parameters=proposal.parameters,
+            rationale=proposal.rationale,
+        )
+        execute_idempotent(proposal.action_id, _do_execute)
+    except Exception:
+        # Fallback if database is offline / unreachable
+        _do_execute(proposal.action_id)
+
+    EXECUTED_ACTION_IDS.add(proposal.action_id)
     return {"action_proposal": proposal.model_copy(update={"status": ActionStatus.EXECUTED})}
 
 

@@ -484,3 +484,189 @@ def test_decision_rules_outage_proposal_parameters(graph):
     assert params.get("outage_id") == "OUT-2026-01"
 
 
+# ==============================================================================
+# Step 10 / Issue #30: Idempotent Action Execution & Status Tracking
+# ==============================================================================
+
+
+@requires_postgres
+def test_idempotent_execution_persists_action_status_lifecycle_in_audit_log(graph):
+    """Verify action_id tracking and atomic lifecycle (pending -> approved -> executed) in audit_log."""
+    config = new_config()
+    thread_id = config["configurable"]["thread_id"]
+
+    # 1. Propose state-changing action -> status must be 'pending' in audit_log
+    start(graph, config, "My ERP System password is locked out, please reset it" + AT_DESK)
+    snapshot = graph.get_state(config)
+    proposal = snapshot.values["action_proposal"]
+    action_id = proposal.action_id
+
+    try:
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT action_id, thread_id, action_type, status, executed_at FROM audit_log WHERE action_id = %s;",
+                    (action_id,),
+                )
+                row = cur.fetchone()
+                assert row is not None, "Action must be persisted in audit_log upon proposal"
+                assert row[0] == action_id
+                assert row[1] == thread_id
+                assert row[2] == ActionType.RESET_CREDENTIALS.value
+                assert row[3] == "pending", "Proposed action must initially have pending status"
+                assert row[4] is None, "executed_at must be NULL before execution"
+
+        # 2. Approve and execute action -> status must update to 'executed' with timestamp
+        result = decide(graph, config, approved=True)
+        assert result["action_proposal"].status == ActionStatus.EXECUTED
+
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT status, executed_at FROM audit_log WHERE action_id = %s;",
+                    (action_id,),
+                )
+                row = cur.fetchone()
+                assert row is not None
+                assert row[0] == "executed", "Status in audit_log must be atomically updated to executed"
+                assert row[1] is not None, "executed_at must be recorded upon successful execution"
+
+    finally:
+        with get_pooled_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM audit_log WHERE action_id = %s;", (action_id,))
+
+
+@requires_postgres
+def test_idempotent_execution_guard_blocks_duplicate_execution_and_replay(graph):
+    """Verify idempotent execution guard rejects re-execution even if in-memory cache is cleared (process restart)."""
+    config = new_config()
+    start(graph, config, "My ERP System password is locked out, please reset it" + AT_DESK)
+    result = decide(graph, config, approved=True)
+    proposal = result["action_proposal"]
+    action_id = proposal.action_id
+
+    try:
+        # Clear in-memory executed action set to simulate container/process restart
+        nodes.EXECUTED_ACTION_IDS.discard(action_id)
+        assert action_id not in nodes.EXECUTED_ACTION_IDS
+
+        # Attempt to re-execute the same action
+        re_result = nodes.execute_action(AgentState(action_proposal=proposal, thread_id=config["configurable"]["thread_id"]))
+        assert re_result["action_proposal"].status == ActionStatus.EXECUTED
+
+        # Verify audit_log row remains intact with terminal executed status
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT status, executed_at FROM audit_log WHERE action_id = %s;",
+                    (action_id,),
+                )
+                row = cur.fetchone()
+                assert row[0] == "executed"
+                assert row[1] is not None
+
+    finally:
+        with get_pooled_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM audit_log WHERE action_id = %s;", (action_id,))
+
+
+@requires_postgres
+def test_open_ticket_action_creates_idempotent_ticket_in_db(graph):
+    """Verify OPEN_TICKET action creates ticket record in database and is completely idempotent against duplicates."""
+    config = new_config()
+    start(graph, config, "The ERP System report export fails with error 500" + AT_DESK)
+    result = decide(graph, config, approved=True)
+    proposal = result["action_proposal"]
+    action_id = proposal.action_id
+
+    assert proposal.action_type == ActionType.OPEN_TICKET
+    assert proposal.status == ActionStatus.EXECUTED
+
+    try:
+        # Verify ticket was created in PostgreSQL tickets table
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT action_id, employee, application, status, symptom, urgency FROM tickets WHERE action_id = %s;",
+                    (action_id,),
+                )
+                ticket = cur.fetchone()
+                assert ticket is not None, "Ticket must be persisted in tickets table"
+                assert ticket[0] == action_id
+                assert ticket[1] == "Maria Papadopoulou"
+                assert ticket[2] == "ERP System"
+                assert ticket[3] == "pending"
+
+        # Simulate replay or duplicate node invocation
+        nodes.EXECUTED_ACTION_IDS.discard(action_id)
+        re_result = nodes.execute_action(
+            AgentState(
+                action_proposal=proposal,
+                thread_id=config["configurable"]["thread_id"],
+                extracted_fields=result["extracted_fields"],
+            )
+        )
+        assert re_result["action_proposal"].status == ActionStatus.EXECUTED
+
+        # Verify no duplicate ticket was created
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT count(*) FROM tickets WHERE action_id = %s;",
+                    (action_id,),
+                )
+                count = cur.fetchone()[0]
+                assert count == 1, "There must be exactly one ticket per action_id"
+
+    finally:
+        with get_pooled_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM tickets WHERE action_id = %s;", (action_id,))
+                    cur.execute("DELETE FROM audit_log WHERE action_id = %s;", (action_id,))
+
+
+@requires_postgres
+def test_unapproved_action_rejected_and_not_executed(graph):
+    """Verify unapproved action is persisted as rejected in audit_log and never creates side-effects."""
+    config = new_config()
+    start(graph, config, "The ERP System report export fails with error 500" + AT_DESK)
+    result = decide(graph, config, approved=False)
+    proposal = result["action_proposal"]
+    action_id = proposal.action_id
+
+    assert proposal.status == ActionStatus.REJECTED
+    assert action_id not in nodes.EXECUTED_ACTION_IDS
+
+    try:
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT status, executed_at FROM audit_log WHERE action_id = %s;",
+                    (action_id,),
+                )
+                row = cur.fetchone()
+                assert row is not None
+                assert row[0] == "rejected"
+                assert row[1] is None
+
+                cur.execute("SELECT count(*) FROM tickets WHERE action_id = %s;", (action_id,))
+                ticket_count = cur.fetchone()[0]
+                assert ticket_count == 0, "No ticket should be created for rejected action"
+
+        # Attempt to pass rejected proposal to execute_action -> must remain rejected with no side-effects
+        exec_result = nodes.execute_action(AgentState(action_proposal=proposal))
+        assert exec_result["action_proposal"].status == ActionStatus.REJECTED
+        assert action_id not in nodes.EXECUTED_ACTION_IDS
+
+    finally:
+        with get_pooled_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM audit_log WHERE action_id = %s;", (action_id,))
+
+
