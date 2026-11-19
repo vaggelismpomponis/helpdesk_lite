@@ -38,10 +38,10 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 - [x] Mocks αντικαταστάθηκαν με πραγματικά tools
 - [x] Interrupt για clarification και approval
 - [x] Approve/Reject στο UI
-- [ ] Idempotent `execute_action`
+- [x] Idempotent `execute_action`
 - [x] Resume μετά από restart
 - [x] Restart test: καμία διπλή εκτέλεση
-- [ ] **Milestone: end-to-end με approval και resume (μέσα εβδ. 2)**
+- [x] **Milestone: end-to-end με approval και resume (μέσα εβδ. 2)**
 
 ## 5. Evaluation και demo (Ημ. 9–10)
 
@@ -71,7 +71,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 |---|---|---|---|---|
 | Platform | [`platform.md`](./roles/platform.md) | 13/13 | @vaggelismpomponis | Workflow |
 | Interface | [`interface.md`](./roles/interface.md) | 8/14 | @AlexZarkalis | Workflow |
-| Workflow | [`workflow.md`](./roles/workflow.md) | 0/14 | _TBD_ | _TBD_ |
+| Workflow | [`workflow.md`](./roles/workflow.md) | 11/14 | @vaggelismpomponis | Knowledge |
 | Knowledge | [`knowledge.md`](./roles/knowledge.md) | 0/13 | _TBD_ | _TBD_ |
 | Quality | [`quality.md`](./roles/quality.md) | 9/15 | @VickyMil-ai | Workflow |
 

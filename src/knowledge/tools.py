@@ -9,9 +9,9 @@ WITH latest AS (
     SELECT doc_id, max(effective_date) AS effective_date
     FROM policy_chunks WHERE effective_date <= current_date GROUP BY doc_id
 )
-SELECT c.content, c.doc_id, c.effective_date, c.source
+SELECT c.content, c.doc_id, c.effective_date, c.source, (c.embedding <=> %s::vector) AS dist
 FROM policy_chunks c JOIN latest USING (doc_id, effective_date)
-ORDER BY c.embedding <=> %s::vector LIMIT 1
+ORDER BY dist LIMIT 1
 """
 
 # Open outages on the services the application depends on. Parameterised: no string building.
@@ -37,16 +37,19 @@ RETURN s.name AS application, [s.name] AS dependencies,
 """
 
 
-def retrieve_policy(query: str, application: str | None = None) -> PolicyResult | None:
-    """Best-matching chunk of the current version of each policy; None if nothing is indexed.
+def retrieve_policy(query: str, application: str | None = None, max_distance: float = 0.74) -> PolicyResult | None:
+    """Best-matching chunk of the current version of each policy; None if nothing is indexed or matches.
 
     `application` only sharpens the query text (policies are not tagged per application).
     """
     if application:
         query = f"{application}: {query}"
+    v = vec(embed([query])[0])
     with pg() as conn:
-        row = conn.execute(POLICY_SQL, (vec(embed([query])[0]),)).fetchone()
-    return PolicyResult(text=row[0], doc_id=row[1], effective_date=row[2].isoformat(), source=row[3]) if row else None
+        row = conn.execute(POLICY_SQL, (v,)).fetchone()
+    if not row or (len(row) > 4 and row[4] is not None and row[4] > max_distance):
+        return None
+    return PolicyResult(text=row[0], doc_id=row[1], effective_date=row[2].isoformat(), source=row[3])
 
 
 def check_graph(application: str) -> GraphResult:
