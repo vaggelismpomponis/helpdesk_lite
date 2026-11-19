@@ -35,7 +35,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 
 ## 4. Ολοκλήρωση (Ημ. 6–8)
 
-- [ ] Mocks αντικαταστάθηκαν με πραγματικά tools
+- [x] Mocks αντικαταστάθηκαν με πραγματικά tools
 - [ ] Interrupt για clarification και approval
 - [x] Approve/Reject στο UI
 - [ ] Idempotent `execute_action`

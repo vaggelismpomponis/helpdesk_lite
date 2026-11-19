@@ -39,7 +39,7 @@
 - [x] Interrupt για clarification
 - [x] Interrupt για approval
 - [x] PostgresSaver συνδεδεμένο
-- [ ] Mocks αντικαταστάθηκαν με πραγματικά tools
+- [x] Mocks αντικαταστάθηκαν με πραγματικά tools
 - [x] Outage → *link to outage*
 - [x] Idempotent `execute_action` (`action_id` + status)
 - [x] Restart test χωρίς διπλή εκτέλεση
