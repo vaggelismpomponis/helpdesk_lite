@@ -1,4 +1,4 @@
-"""Graph skeleton: routing, interrupts, approval and idempotency with mock nodes."""
+"""Graph skeleton and completion: routing, interrupts, approval, idempotency, and live Knowledge tools."""
 
 import uuid
 
@@ -374,3 +374,41 @@ def test_build_graph_use_postgres_factory():
 
     pg_graph = build_graph(use_postgres=True)
     assert pg_graph is not None
+
+
+# ==============================================================================
+# Step 8 / Issue #28: Live Knowledge Tools Integration & Mocks Decommissioning
+# ==============================================================================
+
+
+def test_mocks_completely_decommissioned_from_nodes():
+    """Verify that nodes module does not import or depend on src.agent.mocks."""
+    assert "mocks" not in nodes.__dict__, "src.agent.nodes must not import or contain 'mocks'"
+    import inspect
+    source = inspect.getsource(nodes)
+    assert "import mocks" not in source, "src.agent.nodes must not import mocks"
+    assert "from src.agent import mocks" not in source, "src.agent.nodes must not import mocks from src.agent"
+
+
+@requires_postgres
+def test_live_retrieve_policy_and_check_graph_state_transitions(graph):
+    """Validate live pgvector and Neo4j queries execute in graph state transitions."""
+    config = new_config()
+    # Live outage on Corporate VPN -> Identity Provider (SSO)
+    result = start(graph, config, "I cannot connect to Corporate VPN, please reset my password" + AT_DESK)
+    assert result["graph_result"] is not None
+    assert result["graph_result"].found is True
+    assert "Identity Provider (SSO)" in result["graph_result"].active_outages
+    assert result["graph_result"].has_active_outage is True
+
+    # Real policy retrieval from pgvector (citations with doc_id, effective_date, source)
+    assert result["policy_result"] is not None
+    assert result["policy_result"].doc_id in ("POL-001", "POL-002")
+    assert result["policy_result"].effective_date is not None
+    assert result["policy_result"].source.endswith(".md")
+
+    # Action proposal decided based on live tools
+    proposal = result["action_proposal"]
+    assert proposal.action_type == ActionType.LINK_OUTAGE
+    assert proposal.requires_approval is False
+
