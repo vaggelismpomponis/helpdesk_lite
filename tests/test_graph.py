@@ -15,7 +15,14 @@ from src.agent.graph import (
     reply,
     start,
 )
-from src.agent.models import ActionProposal, ActionStatus, ActionType, AgentState, PolicyResult
+from src.agent.models import (
+    ActionProposal,
+    ActionStatus,
+    ActionType,
+    AgentState,
+    ExtractedFields,
+    PolicyResult,
+)
 from src.db.checkpointer import PostgresSaver
 from src.db.connection import get_pooled_connection, is_postgres_available
 
@@ -699,5 +706,75 @@ def test_unapproved_action_rejected_and_not_executed(graph):
             with conn.transaction():
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM audit_log WHERE action_id = %s;", (action_id,))
+
+
+def test_llm_thinking_offline_mode_fallback(monkeypatch):
+    """Verify that when offline mode is enabled, get_llm returns None and respond works deterministically."""
+    monkeypatch.setenv("OFFLINE_MODE", "true")
+    assert nodes.get_llm() is None
+
+    state = AgentState(
+        action_proposal=ActionProposal(
+            action_id="test-action-1",
+            action_type=ActionType.LINK_OUTAGE,
+            status=ActionStatus.APPROVED,
+            rationale="Active outage on Identity Provider (SSO)",
+        ),
+        policy_result=PolicyResult(
+            doc_id="POL-001",
+            effective_date="2026-09-01",
+            source="POL-001_v2.0.md",
+            text="Password Reset Policy",
+        ),
+    )
+    result = nodes.respond(state)
+    assert "Action: link_outage [approved]" in result["final_response"]
+    assert "POL-001 (effective 2026-09-01)" in result["final_response"]
+    assert "thinking" not in result
+
+
+def test_llm_thinking_and_interpretation_integrated(monkeypatch):
+    """Verify that LLM thinking and explanation are synthesized into final_response and state.thinking."""
+    class MockLLM:
+        def invoke(self, messages):
+            class Resp:
+                content = (
+                    "THINKING:\n"
+                    "Active outage on SSO explains the VPN connectivity failure, inhibiting credential reset.\n\n"
+                    "EXPLANATION:\n"
+                    "We identified that your VPN issue is due to the ongoing SSO outage. Your ticket is linked to the outage."
+                )
+            return Resp()
+
+    monkeypatch.setattr(nodes, "get_llm", lambda: MockLLM())
+
+    state = AgentState(
+        messages=[{"role": "user", "content": "I cannot connect to VPN"}],
+        extracted_fields=ExtractedFields(
+            employee="Maria Papadopoulou",
+            application="Corporate VPN",
+            symptom="cannot connect to VPN",
+            office="Athens",
+            device="MacBook Pro",
+        ),
+        action_proposal=ActionProposal(
+            action_id="test-action-2",
+            action_type=ActionType.LINK_OUTAGE,
+            status=ActionStatus.APPROVED,
+            rationale="Active outage on Identity Provider (SSO)",
+        ),
+        policy_result=PolicyResult(
+            doc_id="POL-001",
+            effective_date="2026-09-01",
+            source="POL-001_v2.0.md",
+            text="Password Reset Policy",
+        ),
+    )
+    result = nodes.respond(state)
+    assert result.get("thinking") == "Active outage on SSO explains the VPN connectivity failure, inhibiting credential reset."
+    assert "Action: link_outage [approved]" in result["final_response"]
+    assert "ongoing SSO outage" in result["final_response"]
+    assert "POL-001 (effective 2026-09-01)" in result["final_response"]
+
 
 
