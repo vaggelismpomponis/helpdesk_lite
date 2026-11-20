@@ -3,6 +3,8 @@
 import uuid
 
 import pytest
+from langchain_core.runnables import RunnableLambda
+from langchain_core.tools import StructuredTool
 from langgraph.checkpoint.memory import MemorySaver
 
 from src.agent import nodes
@@ -22,6 +24,7 @@ from src.agent.models import (
     AgentState,
     ExtractedFields,
     PolicyResult,
+    ResponseInterpretation,
 )
 from src.db.checkpointer import PostgresSaver
 from src.db.connection import get_pooled_connection, is_postgres_available
@@ -198,6 +201,13 @@ UNRELATED_POLICY = PolicyResult(
 )
 
 
+
+def stub_tool(name, result):
+    """LangChain tool with the same arguments as the Knowledge tool, returning a fixed result."""
+    return StructuredTool.from_function(
+        func=lambda query, application=None: result, name=name, description=f"Stub {name}"
+    )
+
 @pytest.mark.parametrize(
     ("request_text", "expected_action", "expected_doc"),
     [
@@ -210,14 +220,14 @@ UNRELATED_POLICY = PolicyResult(
 def test_action_citation_ignores_unrelated_semantic_match(graph, monkeypatch, request_text, expected_action, expected_doc):
     """With real embeddings an unrelated policy can rank first (EVAL-06, EVAL-09); actions cite the
     policy the request names, otherwise the policy that governs them."""
-    monkeypatch.setattr(nodes, "knowledge_retrieve_policy", lambda query, app=None: UNRELATED_POLICY)
+    monkeypatch.setattr(nodes, "knowledge_retrieve_policy", stub_tool("retrieve_policy", UNRELATED_POLICY))
     result = start(graph, new_config(), request_text + AT_DESK)
     assert result["action_proposal"].action_type == expected_action
     assert result["policy_result"].doc_id == expected_doc
 
 
 def test_policy_answer_keeps_semantic_match(graph, monkeypatch):
-    monkeypatch.setattr(nodes, "knowledge_retrieve_policy", lambda query, app=None: UNRELATED_POLICY)
+    monkeypatch.setattr(nodes, "knowledge_retrieve_policy", stub_tool("retrieve_policy", UNRELATED_POLICY))
     result = start(graph, new_config(EMP02), "How early must I notify IT before working abroad?")
     assert result["action_proposal"].action_type == ActionType.ANSWER_POLICY
     assert result["policy_result"].doc_id == "POL-008"
@@ -735,18 +745,13 @@ def test_llm_thinking_offline_mode_fallback(monkeypatch):
 
 def test_llm_thinking_and_interpretation_integrated(monkeypatch):
     """Verify that LLM thinking and explanation are synthesized into final_response and state.thinking."""
-    class MockLLM:
-        def invoke(self, messages):
-            class Resp:
-                content = (
-                    "THINKING:\n"
-                    "Active outage on SSO explains the VPN connectivity failure, inhibiting credential reset.\n\n"
-                    "EXPLANATION:\n"
-                    "We identified that your VPN issue is due to the ongoing SSO outage. Your ticket is linked to the outage."
-                )
-            return Resp()
-
-    monkeypatch.setattr(nodes, "get_llm", lambda: MockLLM())
+    llm = FakeLLM({
+        ResponseInterpretation: ResponseInterpretation(
+            thinking="Active outage on SSO explains the VPN connectivity failure, inhibiting credential reset.",
+            explanation="We identified that your VPN issue is due to the ongoing SSO outage. Your ticket is linked to the outage.",
+        ),
+    })
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
 
     state = AgentState(
         messages=[{"role": "user", "content": "I cannot connect to VPN"}],
@@ -777,4 +782,106 @@ def test_llm_thinking_and_interpretation_integrated(monkeypatch):
     assert "POL-001 (effective 2026-09-01)" in result["final_response"]
 
 
+class FakeLLM:
+    """Chat model stand-in: with_structured_output(schema) returns the given value, or raises it."""
 
+    def __init__(self, outputs):
+        self.outputs = outputs
+
+    def with_structured_output(self, schema):
+        out = self.outputs[schema]
+
+        def run(_prompt):
+            if isinstance(out, Exception):
+                raise out
+            return out
+
+        return RunnableLambda(run)
+
+
+def _extract(text, email=None):
+    state = AgentState(messages=[{"role": "user", "content": text}])
+    return nodes.extract_fields(state, {"configurable": {"user_email": email}})
+
+
+def test_llm_extraction_fills_fields_rules_miss(monkeypatch):
+    """The LLM maps paraphrases ("my Mac", "finance reports site") to known values the rules cannot match."""
+    llm = FakeLLM({
+        ExtractedFields: ExtractedFields(
+            employee="Maria Papadopoulou", application="Finance Portal", symptom="keeps logging me off",
+            urgency="medium", office="Athens", device="MacBook Pro",
+        ),
+    })
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    text = "I'm maria.papadopoulou@nimbus.com from the Athens office, on my Mac. The finance reports site keeps logging me off."
+    result = _extract(text)
+    fields = result["extracted_fields"]
+    assert fields.device == "MacBook Pro"
+    assert fields.application == "Finance Portal"
+    assert fields.urgency == "medium"
+    assert fields.symptom == text  # the rules found a symptom, so it is kept
+    assert result["needs_clarification"] is False
+
+
+def test_llm_extraction_never_keeps_unknown_values(monkeypatch):
+    """Values outside the directory and the known offices, devices and urgency levels are dropped: ask, don't guess."""
+    llm = FakeLLM({
+        ExtractedFields: ExtractedFields(
+            employee="John Smith", application="ERP System", symptom="export fails with error 500",
+            urgency="urgent", office="Paris", device="iPad",
+        ),
+    })
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    result = _extract("The ERP System report export fails with error 500")
+    fields = result["extracted_fields"]
+    assert (fields.employee, fields.office, fields.device, fields.urgency) == (None, None, None, None)
+    assert fields.application == "ERP System"
+    assert result["needs_clarification"] is True
+    assert set(fields.missing_fields()) == {"employee", "office", "device"}
+
+
+def test_llm_extraction_drops_symptom_not_in_user_text(monkeypatch):
+    llm = FakeLLM({ExtractedFields: ExtractedFields(symptom="VPN keeps disconnecting")})
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    result = _extract("I'm Employee 02, London office, Linux Workstation.")
+    assert result["extracted_fields"].symptom is None
+    assert "symptom" in result["extracted_fields"].missing_fields()
+
+
+def test_llm_extraction_failure_falls_back_to_rules(monkeypatch, caplog):
+    llm = FakeLLM({ExtractedFields: RuntimeError("model unavailable")})
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    text = "I'm maria.papadopoulou@nimbus.com. My ERP System password is locked out." + AT_DESK
+    with caplog.at_level("WARNING", logger="src.agent.nodes"):
+        result = _extract(text)
+    fields = result["extracted_fields"]
+    assert (fields.employee, fields.application, fields.office, fields.device) == (
+        "Maria Papadopoulou", "ERP System", "Athens", "MacBook Pro",
+    )
+    assert "LLM field extraction failed" in caplog.text
+
+
+def test_llm_interpretation_citing_another_policy_is_discarded(monkeypatch, caplog):
+    """The rules choose the action and the citation; LLM text that cites a different policy is dropped."""
+    llm = FakeLLM({
+        ResponseInterpretation: ResponseInterpretation(
+            thinking="POL-008 covers this.", explanation="Per POL-008 you must notify IT before travelling.",
+        ),
+    })
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    state = AgentState(
+        messages=[{"role": "user", "content": "My ERP System password is locked out."}],
+        action_proposal=ActionProposal(
+            action_id="test-action-3", action_type=ActionType.RESET_CREDENTIALS, status=ActionStatus.PENDING,
+            rationale="Credential reset requested and no outage explains it",
+        ),
+        policy_result=PolicyResult(
+            doc_id="POL-001", effective_date="2026-09-01", source="POL-001_v2.0.md", text="Password Reset Policy",
+        ),
+    )
+    with caplog.at_level("WARNING", logger="src.agent.nodes"):
+        result = nodes.respond(state)
+    assert "thinking" not in result
+    assert "POL-008" not in result["final_response"]
+    assert "POL-001 (effective 2026-09-01)" in result["final_response"]
+    assert "discarding it" in caplog.text

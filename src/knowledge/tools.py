@@ -1,4 +1,10 @@
-"""Tools called by the Workflow nodes: retrieve_policy and check_graph."""
+"""Tools called by the Workflow nodes: retrieve_policy and check_graph.
+
+The plain functions are wrapped as LangChain tools at the end of this module, so that every call
+shows up as a tool run in LangSmith.
+"""
+from langchain_core.tools import StructuredTool
+
 from .common import embed, neo4j_driver, pg, vec
 from .models import GraphResult, Outage, PolicyResult
 
@@ -71,3 +77,16 @@ def check_graph(application: str) -> GraphResult:
         active_outages=sorted({o["service"] for o in r["outages"]}),
         outages=[Outage(**o) for o in r["outages"]],
     )
+
+
+retrieve_policy_tool = StructuredTool.from_function(
+    func=retrieve_policy,
+    name="retrieve_policy",
+    description="Return the current version of the policy that best matches the query, with doc_id and effective_date.",
+)
+
+check_graph_tool = StructuredTool.from_function(
+    func=check_graph,
+    name="check_graph",
+    description="Return the services an application depends on and any open outages on them.",
+)
