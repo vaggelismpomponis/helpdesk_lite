@@ -31,7 +31,12 @@ class ActionType(str, Enum):
     ESCALATE = "escalate"
 
 
-STATE_CHANGING_ACTIONS = {ActionType.RESET_CREDENTIALS, ActionType.OPEN_TICKET, ActionType.ESCALATE}
+STATE_CHANGING_ACTIONS = {
+    ActionType.LINK_OUTAGE,
+    ActionType.RESET_CREDENTIALS,
+    ActionType.OPEN_TICKET,
+    ActionType.ESCALATE,
+}
 
 
 class ActionStatus(str, Enum):

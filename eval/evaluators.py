@@ -11,8 +11,8 @@ the ``doc_id`` / ``effective_date`` citation fields of ``PolicyResult``.
 from typing import Any, Literal
 from typing_extensions import NotRequired, TypedDict
 
-# ActionType values that change state and require human approval (contracts, section 5).
-STATE_CHANGING_ACTIONS = {"reset_credentials", "open_ticket", "escalate"}
+# ActionType values that change state or link tickets and require human approval.
+STATE_CHANGING_ACTIONS = {"link_outage", "reset_credentials", "open_ticket", "escalate"}
 
 
 class Citation(TypedDict):

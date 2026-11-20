@@ -210,15 +210,16 @@ def test_path_informational_policy_question():
 
 @requires_postgres
 def test_path_outage_detection_bypasses_approval():
-    """Path 6: Request on application with active outage -> links to outage -> no approval needed."""
+    """Path 6: Request on application with active outage -> links to outage -> pauses for approval."""
     graph = get_production_graph()
     config = new_config()
 
-    result = start(graph, config, "I can't connect to the VPN, please reset my password" + AT_DESK)
-    assert pending(graph, config) is None
-    proposal = result["action_proposal"]
+    start(graph, config, "I can't connect to the VPN, please reset my password" + AT_DESK)
+    assert pending(graph, config) == "approval"
+    proposal = graph.get_state(config).values["action_proposal"]
     assert proposal.action_type == ActionType.LINK_OUTAGE
-    assert not proposal.requires_approval
+    assert proposal.requires_approval
+    result = decide(graph, config, approved=True)
     assert "open outage" in result["final_response"].lower()
 
 

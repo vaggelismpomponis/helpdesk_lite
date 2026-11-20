@@ -20,7 +20,11 @@ from src.agent.models import ActionStatus, AgentState
 
 
 def route_after_extract(state: AgentState) -> str:
-    return "ask_clarification" if state.needs_clarification else "retrieve_policy"
+    if state.needs_clarification:
+        return "ask_clarification"
+    if nodes.is_followup_turn(state):
+        return "respond"
+    return "retrieve_policy"
 
 
 def route_after_decide(state: AgentState) -> str:
@@ -69,7 +73,11 @@ def build_graph(
         builder.add_node(node.__name__, node)
 
     builder.add_edge(START, "extract_fields")
-    builder.add_conditional_edges("extract_fields", route_after_extract, ["ask_clarification", "retrieve_policy"])
+    builder.add_conditional_edges(
+        "extract_fields",
+        route_after_extract,
+        ["ask_clarification", "retrieve_policy", "respond"],
+    )
     builder.add_edge("ask_clarification", "extract_fields")
     builder.add_edge("retrieve_policy", "check_graph")
     builder.add_edge("check_graph", "decide_action")
@@ -134,7 +142,12 @@ def start(graph: CompiledStateGraph, config: dict, request: str) -> dict:
     if user_email := config.get("configurable", {}).get("user_email"):
         meta.setdefault("user_email", user_email)
     config.setdefault("tags", [])
-    return graph.invoke({"thread_id": thread_id, "messages": [{"role": "user", "content": request}]}, config)
+    existing = graph.get_state(config)
+    prev_messages = (existing.values.get("messages") if existing and existing.values else None) or []
+    return graph.invoke(
+        {"thread_id": thread_id, "messages": [*prev_messages, {"role": "user", "content": request}]},
+        config,
+    )
 
 
 def reply(graph: CompiledStateGraph, config: dict, answer: str) -> dict:

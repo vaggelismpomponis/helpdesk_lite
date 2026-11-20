@@ -44,7 +44,8 @@ def count_executions(graph: Any, config: dict) -> int:
     for snapshot, parent in zip(history, history[1:]):
         # Only the node name is read from the metadata: src/db/checkpointer.py stores the written
         # values there as text, so the statuses come from the saved state of each step.
-        if "execute_action" not in (snapshot.metadata.get("writes") or {}):
+        writes = snapshot.metadata.get("writes") if snapshot.metadata else None
+        if writes is not None and "execute_action" not in writes:
             continue
         before = _status(parent.values.get("action_proposal"))
         after = _status(snapshot.values.get("action_proposal"))

@@ -6,7 +6,7 @@
       "requires_clarification": true,
       "clarification_answer": "I am working from the Athens office on my MacBook Pro.",
       "expected_action": "link_to_outage",
-      "requires_approval": false,
+      "requires_approval": true,
       "expected_citation": {
         "doc_id": "POL-001",
         "effective_date": "2026-09-01"
@@ -71,7 +71,7 @@
       "sender_email": "employee06@nimbus.com",
       "requires_clarification": false,
       "expected_action": "link_to_outage",
-      "requires_approval": false,
+      "requires_approval": true,
       "expected_citation": {
         "doc_id": "POL-003",
         "effective_date": "2026-08-20"

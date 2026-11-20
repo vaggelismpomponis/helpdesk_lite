@@ -37,10 +37,14 @@ def get_connection_pool(min_size: int = 1, max_size: int = 10) -> ConnectionPool
     if _POOL is None or _POOL.closed:
         with _POOL_LOCK:
             if _POOL is None or _POOL.closed:
+                if not is_postgres_available():
+                    raise psycopg.OperationalError("PostgreSQL is not reachable")
                 _POOL = ConnectionPool(
                     conninfo=get_db_url(),
                     min_size=min_size,
                     max_size=max_size,
+                    timeout=2.0,
+                    kwargs={"connect_timeout": 2},
                     open=True,
                 )
     return _POOL
@@ -48,7 +52,7 @@ def get_connection_pool(min_size: int = 1, max_size: int = 10) -> ConnectionPool
 
 def get_db_connection(row_factory: Optional[any] = None) -> psycopg.Connection:
     """Create a standalone PostgreSQL connection using environment configuration."""
-    kwargs = {}
+    kwargs = {"connect_timeout": 2}
     if row_factory:
         kwargs["row_factory"] = row_factory
     return psycopg.connect(get_db_url(), **kwargs)
@@ -65,7 +69,7 @@ def get_pooled_connection() -> Generator[psycopg.Connection, None, None]:
 def is_postgres_available() -> bool:
     """Check if PostgreSQL is reachable."""
     try:
-        with get_pooled_connection() as conn:
+        with psycopg.connect(get_db_url(), connect_timeout=1) as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1;")
                 return True
