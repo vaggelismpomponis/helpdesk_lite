@@ -18,6 +18,7 @@ __all__ = [
     "ExtractedFields",
     "GraphResult",
     "PolicyResult",
+    "ResponseInterpretation",
     "STATE_CHANGING_ACTIONS",
 ]
 
@@ -74,6 +75,13 @@ class ActionProposal(BaseModel):
     status: ActionStatus = Field(default=ActionStatus.PENDING, description="Current execution lifecycle status")
     requires_approval: bool = Field(default=False, description="True for state-changing actions")
     rationale: str = Field(default="", description="Reasoning for action selection")
+
+
+class ResponseInterpretation(BaseModel):
+    """Structured LLM output used by the respond node."""
+
+    thinking: str = Field(description="2-3 sentences of reasoning linking the symptom, outages and policy rules")
+    explanation: str = Field(description="Explanation for the user of what was found and why this action was chosen")
 
 
 class AgentState(BaseModel):

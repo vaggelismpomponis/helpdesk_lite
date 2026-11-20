@@ -4,11 +4,13 @@ Wired to real Knowledge tools (retrieve_policy via pgvector, check_graph via Neo
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 import re
 import uuid
 
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig
 
 from src.agent.models import (
@@ -18,11 +20,14 @@ from src.agent.models import (
     ActionType,
     AgentState,
     ExtractedFields,
+    ResponseInterpretation,
 )
 from src.knowledge.tools import (
-    check_graph as knowledge_check_graph,
-    retrieve_policy as knowledge_retrieve_policy,
+    check_graph_tool as knowledge_check_graph,
+    retrieve_policy_tool as knowledge_retrieve_policy,
 )
+
+logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 _GRAPH_SEED_PATH = DATA_DIR / "graph_seed.json"
@@ -230,8 +235,99 @@ def _extract_symptom(
     return raw
 
 
+KNOWN_APPLICATIONS = sorted(
+    {a["name"] for a in _SEED_DATA["applications"]} | {s["name"] for s in _SEED_DATA["services"]}
+)
+URGENCY_LEVELS = ("low", "medium", "high")
+
+EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You extract triage fields from IT support requests for HelpDesk Lite.\n"
+        "Fill a field only when the user states it in the conversation. Never guess or infer a value "
+        "that is not written: leave the field null instead, and the assistant will ask the user.\n"
+        "- employee: the name or work email the user gives for themselves.\n"
+        "- application: the affected application or service, using one of these names: {applications}.\n"
+        "- symptom: a short description of the problem the user observes, close to their own words.\n"
+        "- urgency: low, medium or high, only if the user expresses urgency or a deadline.\n"
+        "- office: one of {offices}, only if the user names it.\n"
+        "- device: one of {devices}, only if the user names it.",
+    ),
+    ("human", "{conversation}"),
+])
+
+
+def _canonical(value: str | None, options: list[str]) -> str | None:
+    """Known option that the value names exactly, or uniquely contains or is contained in."""
+    if not value or not value.strip():
+        return None
+    v = value.strip().lower()
+    exact = [o for o in options if o.lower() == v]
+    if exact:
+        return exact[0]
+    partial = [o for o in options if o.lower() in v or v in o.lower()]
+    return partial[0] if len(partial) == 1 else None
+
+
+def _grounded(value: str | None, text: str) -> bool:
+    """True if at least one meaningful word of the value appears in the user's text."""
+    if not value:
+        return False
+    lowered = text.lower()
+    words = [w for w in re.findall(r"[a-z0-9']+", value.lower()) if len(w) > 3]
+    return any(re.search(rf"\b{re.escape(w)}\b", lowered) for w in words)
+
+
+def _llm_extract(text: str) -> ExtractedFields | None:
+    """Structured extraction with the LLM; None if the LLM is unavailable or fails."""
+    llm = get_llm()
+    if llm is None:
+        return None
+    try:
+        chain = EXTRACTION_PROMPT | llm.with_structured_output(ExtractedFields)
+        result = chain.invoke({
+            "applications": ", ".join(KNOWN_APPLICATIONS),
+            "offices": ", ".join(OFFICES),
+            "devices": ", ".join(DEVICES),
+            "conversation": text,
+        })
+        return result if isinstance(result, ExtractedFields) else ExtractedFields.model_validate(result)
+    except Exception:
+        logger.warning("LLM field extraction failed; using rule-based extraction only.", exc_info=True)
+        return None
+
+
+def _merge_llm_fields(fields: ExtractedFields, llm_fields: ExtractedFields | None, text: str) -> ExtractedFields:
+    """Fill fields the rules missed with LLM values, keeping only values grounded in known data or the text."""
+    if llm_fields is None:
+        return fields
+    candidates = {
+        "employee": find_employee(text=llm_fields.employee) if llm_fields.employee else None,
+        "application": (
+            find_application(llm_fields.application) or _canonical(llm_fields.application, KNOWN_APPLICATIONS)
+            if llm_fields.application
+            else None
+        ),
+        "symptom": llm_fields.symptom.strip() if _grounded(llm_fields.symptom, text) else None,
+        "urgency": (llm_fields.urgency or "").strip().lower() or None,
+        "office": _canonical(llm_fields.office, OFFICES),
+        "device": _canonical(llm_fields.device, DEVICES),
+    }
+    if candidates["urgency"] not in URGENCY_LEVELS:
+        candidates["urgency"] = None
+    updates = {k: v for k, v in candidates.items() if v and not getattr(fields, k)}
+    if updates:
+        logger.info("LLM filled triage fields: %s", ", ".join(sorted(updates)))
+    return fields.model_copy(update=updates)
+
+
 def extract_fields(state: AgentState, config: RunnableConfig) -> dict:
-    """Extract fields using Pydantic schema and enforce 'ask if missing' rule."""
+    """Extract fields with rules plus LLM structured output, and enforce the 'ask if missing' rule.
+
+    Rule-based matches against the seed data come first. The LLM only fills fields the rules missed,
+    and its values are kept only if they match a known employee, application, office or device, or
+    (for the symptom) appear in the user's own words. Without an LLM the rules work alone.
+    """
     text = _user_text(state)
     lowered = text.lower()
 
@@ -260,7 +356,10 @@ def extract_fields(state: AgentState, config: RunnableConfig) -> dict:
         device=device,
     )
 
-    # 6. Enforce strict "Ask if Missing" rule:
+    # 6. Fill the gaps with LLM structured output, keeping only grounded values
+    fields = _merge_llm_fields(fields, _llm_extract(text), text)
+
+    # 7. Enforce strict "Ask if Missing" rule:
     # Policy questions do not need triage fields; incident requests require all mandatory fields.
     if is_question(text):
         missing = []
@@ -381,7 +480,7 @@ def retrieve_policy(state: AgentState) -> dict:
         else fields.application
     )
     try:
-        policy = knowledge_retrieve_policy(query, app)
+        policy = knowledge_retrieve_policy.invoke({"query": query, "application": app})
         if policy is None:
             policy = _offline_fallback_policy(query, app)
         return {"policy_result": policy}
@@ -394,7 +493,7 @@ def check_graph(state: AgentState) -> dict:
     if not application:
         return {"graph_result": None}
     try:
-        return {"graph_result": knowledge_check_graph(application)}
+        return {"graph_result": knowledge_check_graph.invoke({"application": application})}
     except Exception:
         return {"graph_result": _offline_fallback_graph(application)}
 
@@ -655,7 +754,7 @@ def get_llm():
                 temperature=0.0,
             )
         except Exception:
-            pass
+            logger.warning("Could not create the Azure OpenAI chat model; trying OpenAI.", exc_info=True)
 
     openai_key = _clean_env(os.getenv("OPENAI_API_KEY"))
     if openai_key and not openai_key.startswith("your_"):
@@ -665,27 +764,43 @@ def get_llm():
             model = _clean_env(os.getenv("LLM_MODEL", "gpt-4o-mini"))
             return ChatOpenAI(model=model, api_key=openai_key, temperature=0.0)
         except Exception:
-            pass
+            logger.warning("Could not create the OpenAI chat model; running without an LLM.", exc_info=True)
 
     return None
+
+
+INTERPRETATION_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        "You are HelpDesk Lite, an IT support assistant for Nimbus Analytics. The action below has already "
+        "been chosen by the decision rules. Explain it; do not change it.\n"
+        "- thinking: 2-3 sentences of technical reasoning linking the user's symptom, outages and policy rules.\n"
+        "- explanation: a clear, professional explanation for the user of what was found and why this action "
+        "was chosen, answering their question.\n"
+        "Use only the facts given. Do not propose a different action, and do not cite any policy other than "
+        "the retrieved one.",
+    ),
+    ("human", "{context}"),
+])
+
+POLICY_ID_PATTERN = re.compile(r"\bPOL-\d{3}\b")
 
 
 def _interpret_results_with_llm(state: AgentState) -> tuple[str | None, str | None]:
     """Use an LLM for thinking and interpretation of retrieved results.
 
     Returns:
-        (thinking, explanation) or (None, None) if LLM is unavailable.
+        (thinking, explanation), or (None, None) if the LLM is unavailable, fails, or cites a policy
+        other than the retrieved one.
     """
     llm = get_llm()
     if llm is None:
         return None, None
 
+    policy = state.policy_result
     try:
-        from langchain_core.messages import HumanMessage, SystemMessage
-
         user_text = _user_text(state)
         fields = state.extracted_fields
-        policy = state.policy_result
         graph_res = state.graph_result
         proposal = state.action_proposal
 
@@ -728,37 +843,26 @@ def _interpret_results_with_llm(state: AgentState) -> tuple[str | None, str | No
             f"Selected Action & Lifecycle: {action_str}"
         )
 
-        system_prompt = (
-            "You are HelpDesk Lite, an agentic IT support assistant for Nimbus Analytics. "
-            "Your role is to interpret the retrieved knowledge (service graph outages, policy documents) "
-            "and provide clear reasoning ('thinking') and an explanation for the user.\n\n"
-            "Format your output strictly with these two section headers:\n"
-            "THINKING:\n"
-            "<2-3 sentences of technical reasoning connecting user symptoms, outages, and policy rules>\n\n"
-            "EXPLANATION:\n"
-            "<Clear, professional explanation for the user explaining what was found, why this action was chosen, and answering their question>"
-        )
-
-        response = llm.invoke([
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=context),
-        ])
-        content = response.content if hasattr(response, "content") else str(response)
-        text = str(content).strip()
-
-        thinking = None
-        explanation = None
-
-        if "THINKING:" in text and "EXPLANATION:" in text:
-            parts = text.split("EXPLANATION:", 1)
-            thinking = parts[0].replace("THINKING:", "").strip()
-            explanation = parts[1].strip()
-        else:
-            explanation = text
-
-        return thinking, explanation
+        chain = INTERPRETATION_PROMPT | llm.with_structured_output(ResponseInterpretation)
+        result = chain.invoke({"context": context})
+        if not isinstance(result, ResponseInterpretation):
+            result = ResponseInterpretation.model_validate(result)
     except Exception:
+        logger.warning("LLM interpretation failed; replying with the rule-based response only.", exc_info=True)
         return None, None
+
+    # The decision and its citation come from the rules. Drop LLM text that cites a different policy.
+    allowed = {policy.doc_id} if policy else set()
+    cited = set(POLICY_ID_PATTERN.findall(f"{result.thinking} {result.explanation}"))
+    if cited - allowed:
+        logger.warning(
+            "LLM interpretation cited %s but the response cites %s; discarding it.",
+            ", ".join(sorted(cited - allowed)),
+            ", ".join(sorted(allowed)) or "no policy",
+        )
+        return None, None
+
+    return result.thinking.strip() or None, result.explanation.strip() or None
 
 
 def respond(state: AgentState) -> dict:
