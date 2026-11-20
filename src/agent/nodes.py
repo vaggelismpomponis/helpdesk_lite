@@ -4,6 +4,7 @@ Wired to real Knowledge tools (retrieve_policy via pgvector, check_graph via Neo
 """
 
 import json
+import os
 from pathlib import Path
 import re
 import uuid
@@ -623,6 +624,143 @@ def execute_action(state: AgentState) -> dict:
     return {"action_proposal": proposal.model_copy(update={"status": ActionStatus.EXECUTED})}
 
 
+def _clean_env(val: str | None) -> str:
+    if not val:
+        return ""
+    return val.strip().strip('"').strip("'")
+
+
+def get_llm():
+    """Return an AzureChatOpenAI or ChatOpenAI instance, or None if offline/keys missing."""
+    offline_mode = (
+        os.getenv("OFFLINE_MODE", "false").lower() in ("true", "1")
+        or os.getenv("LLM_PROVIDER") == "offline"
+    )
+    if offline_mode:
+        return None
+
+    azure_key = _clean_env(os.getenv("AZURE_OPENAI_API_KEY"))
+    azure_endpoint = _clean_env(os.getenv("AZURE_OPENAI_ENDPOINT"))
+    if azure_key and not azure_key.startswith("your_") and azure_endpoint and not azure_endpoint.startswith("https://your-"):
+        try:
+            from langchain_openai import AzureChatOpenAI
+
+            deployment = _clean_env(os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4.1-mini"))
+            api_version = _clean_env(os.getenv("OPENAI_API_VERSION", "2024-10-21"))
+            return AzureChatOpenAI(
+                azure_deployment=deployment,
+                openai_api_version=api_version,
+                azure_endpoint=azure_endpoint,
+                api_key=azure_key,
+                temperature=0.0,
+            )
+        except Exception:
+            pass
+
+    openai_key = _clean_env(os.getenv("OPENAI_API_KEY"))
+    if openai_key and not openai_key.startswith("your_"):
+        try:
+            from langchain_openai import ChatOpenAI
+
+            model = _clean_env(os.getenv("LLM_MODEL", "gpt-4o-mini"))
+            return ChatOpenAI(model=model, api_key=openai_key, temperature=0.0)
+        except Exception:
+            pass
+
+    return None
+
+
+def _interpret_results_with_llm(state: AgentState) -> tuple[str | None, str | None]:
+    """Use an LLM for thinking and interpretation of retrieved results.
+
+    Returns:
+        (thinking, explanation) or (None, None) if LLM is unavailable.
+    """
+    llm = get_llm()
+    if llm is None:
+        return None, None
+
+    try:
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        user_text = _user_text(state)
+        fields = state.extracted_fields
+        policy = state.policy_result
+        graph_res = state.graph_result
+        proposal = state.action_proposal
+
+        fields_str = (
+            f"Employee: {fields.employee or 'Unknown'}, "
+            f"Application: {fields.application or 'Unknown'}, "
+            f"Symptom: {fields.symptom or 'Unspecified'}, "
+            f"Office: {fields.office or 'Unknown'}, "
+            f"Device: {fields.device or 'Unknown'}"
+            if fields
+            else "None"
+        )
+
+        graph_str = "No graph data."
+        if graph_res:
+            deps = ", ".join(graph_res.dependencies) if graph_res.dependencies else "None"
+            outages = ", ".join(graph_res.active_outages) if graph_res.active_outages else "None"
+            graph_str = f"Application: {graph_res.application}, Dependencies: {deps}, Active Outages: {outages}"
+
+        policy_str = "No policy cited."
+        if policy:
+            policy_str = (
+                f"Doc ID: {policy.doc_id}, Effective Date: {policy.effective_date}, Source: {policy.source}\n"
+                f"Content Excerpt: {policy.text[:500]}"
+            )
+
+        action_str = "No action proposed."
+        if proposal:
+            action_str = (
+                f"Action Type: {proposal.action_type.value}, "
+                f"Status: {proposal.status.value}, "
+                f"Rationale: {proposal.rationale}"
+            )
+
+        context = (
+            f"User Request: {user_text}\n\n"
+            f"Extracted Triage Fields: {fields_str}\n\n"
+            f"Knowledge Graph (Dependencies & Outages): {graph_str}\n\n"
+            f"Retrieved Policy: {policy_str}\n\n"
+            f"Selected Action & Lifecycle: {action_str}"
+        )
+
+        system_prompt = (
+            "You are HelpDesk Lite, an agentic IT support assistant for Nimbus Analytics. "
+            "Your role is to interpret the retrieved knowledge (service graph outages, policy documents) "
+            "and provide clear reasoning ('thinking') and an explanation for the user.\n\n"
+            "Format your output strictly with these two section headers:\n"
+            "THINKING:\n"
+            "<2-3 sentences of technical reasoning connecting user symptoms, outages, and policy rules>\n\n"
+            "EXPLANATION:\n"
+            "<Clear, professional explanation for the user explaining what was found, why this action was chosen, and answering their question>"
+        )
+
+        response = llm.invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=context),
+        ])
+        content = response.content if hasattr(response, "content") else str(response)
+        text = str(content).strip()
+
+        thinking = None
+        explanation = None
+
+        if "THINKING:" in text and "EXPLANATION:" in text:
+            parts = text.split("EXPLANATION:", 1)
+            thinking = parts[0].replace("THINKING:", "").strip()
+            explanation = parts[1].strip()
+        else:
+            explanation = text
+
+        return thinking, explanation
+    except Exception:
+        return None, None
+
+
 def respond(state: AgentState) -> dict:
     proposal = state.action_proposal
     parts = [f"Action: {proposal.action_type.value} [{proposal.status.value}]. {proposal.rationale}."]
@@ -630,7 +768,21 @@ def respond(state: AgentState) -> dict:
         parts.append("Your request was linked to the open outage; no credential reset is needed.")
     if proposal.status == ActionStatus.REJECTED:
         parts.append("The action was not approved, so nothing was changed.")
+
+    thinking, explanation = _interpret_results_with_llm(state)
+    if explanation:
+        parts.append(f"\n\n{explanation}")
+
     if state.policy_result:
-        parts.append(f"Source: {state.policy_result.doc_id} (effective {state.policy_result.effective_date}).")
+        citation_str = f"Source: {state.policy_result.doc_id} (effective {state.policy_result.effective_date})."
+        if citation_str not in " ".join(parts):
+            parts.append(f"\n{citation_str}")
+
     text = " ".join(parts)
-    return {"final_response": text, "messages": [*state.messages, {"role": "assistant", "content": text}]}
+    update = {
+        "final_response": text,
+        "messages": [*state.messages, {"role": "assistant", "content": text}],
+    }
+    if thinking:
+        update["thinking"] = thinking
+    return update

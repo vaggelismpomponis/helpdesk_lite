@@ -86,3 +86,4 @@ class AgentState(BaseModel):
     graph_result: Optional[GraphResult] = Field(default=None, description="Dependency and outage status")
     action_proposal: Optional[ActionProposal] = Field(default=None, description="Proposed action & status")
     final_response: Optional[str] = Field(default=None, description="Final assistant message with citations")
+    thinking: Optional[str] = Field(default=None, description="LLM reasoning and interpretation of results")

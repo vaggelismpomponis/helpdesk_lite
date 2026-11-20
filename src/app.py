@@ -116,7 +116,11 @@ def format_step_output(node_name: str, node_output: dict[str, Any]) -> str:
         return f"- **Action ID:** `{proposal.action_id}`\n- **Status:** `{proposal.status.value}`"
 
     if node_name == "respond":
-        return node_output.get("final_response") or "Response generated."
+        thinking = node_output.get("thinking")
+        final_resp = node_output.get("final_response") or "Response generated."
+        if thinking:
+            return f"💭 **Thinking / Interpretation:**\n{thinking}\n\n**Response:**\n{final_resp}"
+        return final_resp
 
     if node_name == "ask_clarification":
         msgs = node_output.get("messages") or []

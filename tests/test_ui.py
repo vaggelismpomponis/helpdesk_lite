@@ -227,6 +227,13 @@ class TestInterfaceFormattingAndHandlers(unittest.IsolatedAsyncioTestCase):
         out_missing = self.ui_app.format_step_output("retrieve_policy", {"policy_result": None})
         self.assertIn("No matching policy found", out_missing)
 
+        out_respond_thinking = self.ui_app.format_step_output(
+            "respond",
+            {"thinking": "SSO outage causes VPN failure.", "final_response": "Action: link_outage."}
+        )
+        self.assertIn("Thinking / Interpretation:", out_respond_thinking)
+        self.assertIn("SSO outage causes VPN failure.", out_respond_thinking)
+
     async def test_double_click_prevention(self) -> None:
         import chainlit as cl
         from src.agent.models import ActionProposal, ActionStatus, ActionType
