@@ -70,7 +70,8 @@ def test_outage_links_instead_of_resetting(graph):
     result = start(graph, config, "I can't connect to the VPN, please reset my password" + AT_DESK)
     proposal = result["action_proposal"]
     assert proposal.action_type == ActionType.LINK_OUTAGE
-    assert not proposal.requires_approval
+    assert proposal.requires_approval
+    assert pending(graph, config) == "approval"
     assert "Identity Provider (SSO)" in result["graph_result"].active_outages
     # Latest version of the reset policy, not v1.
     assert result["policy_result"].effective_date == "2026-09-01"
@@ -192,6 +193,8 @@ def test_outage_without_matching_policy_cites_outage_policy(graph):
     result = start(graph, config, "My outgoing emails in Email & Calendar are stuck in the outbox." + AT_DESK)
     assert result["action_proposal"].action_type == ActionType.LINK_OUTAGE
     assert result["policy_result"].doc_id == "POL-003"
+    assert pending(graph, config) == "approval"
+    result = decide(graph, config, approved=True)
     assert "POL-003" in result["final_response"]
 
 
@@ -458,7 +461,7 @@ def test_live_retrieve_policy_and_check_graph_state_transitions(graph):
     # Action proposal decided based on live tools
     proposal = result["action_proposal"]
     assert proposal.action_type == ActionType.LINK_OUTAGE
-    assert proposal.requires_approval is False
+    assert proposal.requires_approval is True
 
 
 # ==============================================================================
@@ -476,11 +479,13 @@ def test_decision_rules_active_outage_inhibits_credential_reset(graph):
     assert proposal.action_type == ActionType.LINK_OUTAGE
     # Acceptance criteria: credential reset is strictly inhibited
     assert proposal.action_type != ActionType.RESET_CREDENTIALS
-    assert not proposal.requires_approval
-    assert proposal.status == ActionStatus.APPROVED
+    assert proposal.requires_approval
+    assert proposal.status == ActionStatus.PENDING
+    assert pending(graph, config) == "approval"
     assert "inhibited" in proposal.rationale.lower()
     assert "Identity Provider (SSO)" in proposal.rationale
     assert "Identity Provider (SSO)" in result["graph_result"].active_outages
+    result = decide(graph, config, approved=True)
     assert "link_outage" in result["final_response"]
 
 
@@ -519,7 +524,7 @@ def test_decision_rules_direct_service_outage(graph):
     proposal = result["action_proposal"]
 
     assert proposal.action_type == ActionType.LINK_OUTAGE
-    assert proposal.requires_approval is False
+    assert proposal.requires_approval is True
 
 
 def test_decision_rules_outage_proposal_parameters(graph):
@@ -885,3 +890,114 @@ def test_llm_interpretation_citing_another_policy_is_discarded(monkeypatch, capl
     assert "POL-008" not in result["final_response"]
     assert "POL-001 (effective 2026-09-01)" in result["final_response"]
     assert "discarding it" in caplog.text
+
+
+# ==============================================================================
+# Conversation Flow, Follow-Ups, Multi-Turn Isolation & Entity Extraction Fixes
+# ==============================================================================
+
+
+def test_policy_question_without_question_mark_routes_directly(graph):
+    """Policy questions without a trailing '?' must not ask for office/device/symptom."""
+    config = new_config(email=None)
+    result = start(graph, config, "What is the Wi-Fi policy for visitors coming to our London office")
+    assert pending(graph, config) is None
+    assert result["action_proposal"].action_type == ActionType.ANSWER_POLICY
+    assert not result["action_proposal"].requires_approval
+    assert result["policy_result"].doc_id == "POL-016"
+
+
+def test_post_action_followup_questions_use_existing_state(graph):
+    """After an action is processed, follow-up questions use existing state without re-asking triage fields."""
+    config = new_config(email=None)
+    start(
+        graph,
+        config,
+        "I'm maria.papadopoulou@nimbus.com. I can't connect to the VPN, can you reset my access?" + AT_DESK,
+    )
+    assert pending(graph, config) == "approval"
+    res1 = decide(graph, config, approved=True)
+    action_id = res1["action_proposal"].action_id
+    assert res1["action_proposal"].action_type == ActionType.LINK_OUTAGE
+    assert res1["action_proposal"].status == ActionStatus.EXECUTED
+
+    # Follow-up 1: Why didn't you reset the password?
+    f1 = start(graph, config, "Why didn't you reset the password?")
+    assert pending(graph, config) is None
+    assert f1["action_proposal"].action_id == action_id
+    assert "Identity Provider (SSO)" in f1["final_response"]
+    assert "outage" in f1["final_response"].lower()
+
+    # Follow-up 2: Which other teams are affected by this outage?
+    f2 = start(graph, config, "Which other teams are affected by this outage?")
+    assert pending(graph, config) is None
+    assert f2["action_proposal"].action_id == action_id
+    assert "Finance" in f2["final_response"]
+    assert "Engineering" in f2["final_response"]
+
+    # Follow-up 3: Which policy did you base this on?
+    f3 = start(graph, config, "Which policy did you base this on?")
+    assert pending(graph, config) is None
+    assert f3["action_proposal"].action_id == action_id
+    assert "POL-001" in f3["final_response"]
+    assert "2026-09-01" in f3["final_response"]
+
+
+def test_multi_turn_new_request_isolates_incident_and_retains_user_context(graph):
+    """A new support issue in the same thread clears old application/symptom/action but keeps employee/office/device."""
+    config = new_config(email=None)
+    start(
+        graph,
+        config,
+        "I'm maria.papadopoulou@nimbus.com. I can't connect to the VPN, please reset my password." + AT_DESK,
+    )
+    res1 = decide(graph, config, approved=True)
+    first_action_id = res1["action_proposal"].action_id
+    assert res1["action_proposal"].action_type == ActionType.LINK_OUTAGE
+
+    # Second turn: new support issue on ERP System without re-stating name, office, or device
+    res2 = start(graph, config, "Now my ERP System report export fails with error 500.")
+    assert pending(graph, config) == "approval"
+    fields2 = res2["extracted_fields"]
+    assert fields2.employee == "Maria Papadopoulou"
+    assert fields2.office == "Athens"
+    assert fields2.device == "MacBook Pro"
+    assert fields2.application == "ERP System"
+    assert "VPN" not in (fields2.symptom or "")
+    assert res2["action_proposal"].action_id != first_action_id
+    assert res2["action_proposal"].action_type == ActionType.OPEN_TICKET
+
+
+def test_partial_device_and_unrecognized_directory_feedback(graph):
+    """Partial device names ('MacBook') match canonical devices, and unknown employee names get directory feedback."""
+    assert nodes.find_device("I am on my MacBook in Athens") == "MacBook Pro"
+    assert nodes.find_device("Using a Windows machine") == "Windows Laptop"
+    assert nodes.find_device("On Linux in London") == "Linux Workstation"
+
+    config = new_config(email=None)
+    res = start(graph, config, "I am John Smith in Athens on my MacBook, ERP System shows error 500.")
+    assert pending(graph, config) == "clarification"
+    assert res["extracted_fields"].device == "MacBook Pro"
+    assert res["extracted_fields"].office == "Athens"
+    assert res["extracted_fields"].employee is None
+    assert "could not find 'John Smith' in the Nimbus Analytics employee directory" in res["clarification_question"]
+
+
+def test_respond_never_emits_double_periods():
+    """Verify respond cleans trailing punctuation on rationale and never outputs '..'."""
+    state = AgentState(
+        action_proposal=ActionProposal(
+            action_id="act-clean-1",
+            action_type=ActionType.LINK_OUTAGE,
+            status=ActionStatus.EXECUTED,
+            rationale="Active outage on Identity Provider (SSO). Credential reset is inhibited.",
+        ),
+        policy_result=PolicyResult(
+            doc_id="POL-001",
+            effective_date="2026-09-01",
+            source="POL-001_password_reset_v2.md",
+            text="Policy text",
+        ),
+    )
+    out = nodes.respond(state)
+    assert ".." not in out["final_response"]
