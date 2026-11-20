@@ -70,7 +70,7 @@ Project-wide πρόοδος. Τα βήματα ανά ρόλο βρίσκοντ�
 | Ρόλος | Checklist | Πρόοδος | Owner | Backup |
 |---|---|---|---|---|
 | Platform | [`platform.md`](./roles/platform.md) | 13/13 | @vaggelismpomponis | Workflow |
-| Interface | [`interface.md`](./roles/interface.md) | 8/14 | @AlexZarkalis | Workflow |
+| Interface | [`interface.md`](./roles/interface.md) | 11/14 | @AlexZarkalis | Workflow |
 | Workflow | [`workflow.md`](./roles/workflow.md) | 11/14 | @vaggelismpomponis | Knowledge |
 | Knowledge | [`knowledge.md`](./roles/knowledge.md) | 0/13 | _TBD_ | _TBD_ |
 | Quality | [`quality.md`](./roles/quality.md) | 9/15 | @VickyMil-ai | Workflow |
