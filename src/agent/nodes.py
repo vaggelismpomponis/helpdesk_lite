@@ -472,6 +472,16 @@ def decide_action(state: AgentState) -> dict:
     except Exception:
         pass
 
+    # Attach tracing metadata to active LangSmith run tree if present
+    try:
+        from langsmith.run_helpers import get_current_run_tree
+
+        rt = get_current_run_tree()
+        if rt:
+            rt.add_metadata({"thread_id": thread_id, "action_id": proposal.action_id})
+    except Exception:
+        pass
+
     # No policy matched the request: cite the policy that governs the chosen action instead.
     policy = state.policy_result or policy_by_id(POLICY_BY_ACTION.get(action_type.value, ""))
     return {"action_proposal": proposal, "policy_result": policy}
@@ -578,6 +588,18 @@ def execute_action(state: AgentState) -> dict:
         _do_execute(proposal.action_id)
 
     EXECUTED_ACTION_IDS.add(proposal.action_id)
+    try:
+        from langsmith.run_helpers import get_current_run_tree
+
+        rt = get_current_run_tree()
+        if rt:
+            rt.add_metadata({
+                "thread_id": state.thread_id or "unknown_thread",
+                "action_id": proposal.action_id,
+                "action_status": ActionStatus.EXECUTED.value,
+            })
+    except Exception:
+        pass
     return {"action_proposal": proposal.model_copy(update={"status": ActionStatus.EXECUTED})}
 
 

@@ -69,6 +69,7 @@ def to_example(entry: dict[str, Any], versions: dict[str, list[str]]) -> dict[st
 
     return {
         "inputs": {
+            "example_id": entry["id"],
             "request": entry["request_text"],
             "sender_email": entry.get("sender_email"),
             "clarification_reply": entry.get("clarification_answer"),
