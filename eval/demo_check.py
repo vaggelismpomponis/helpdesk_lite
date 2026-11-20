@@ -56,7 +56,7 @@ DEMO_STEPS = [
             "password. I'm in London on my MacBook Pro.",
         ),
         action="link_outage",
-        waits_for=None,
+        waits_for="approval",
         citation=("POL-001", "2026-09-01"),
         outage_id="OUT-2026-01",
     ),
