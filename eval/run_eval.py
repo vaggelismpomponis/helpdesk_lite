@@ -14,7 +14,7 @@ import argparse
 import os
 import sys
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from langsmith import traceable
@@ -33,9 +33,48 @@ def _executed(proposal: Any) -> bool:
 
 
 @traceable(name="helpdesk_request")
-def run_example(graph: Any, inputs: dict) -> tuple[RunOutcome, list[str]]:
-    """Run one request, answering interrupts from the example inputs. Returns outcome and a log."""
-    config = config_for(str(uuid.uuid4()), inputs.get("sender_email"))
+def run_example(
+    graph: Any,
+    inputs: dict,
+    *,
+    example_id: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> tuple[RunOutcome, list[str]]:
+    """Run one request, answering interrupts from the example inputs. Returns outcome and a log.
+
+    Attaches thread_id, action_id, and evaluation tags to LangSmith trace runs and LangGraph config.
+    """
+    resolved_id = example_id or inputs.get("example_id")
+    thread_id = inputs.get("thread_id") or str(uuid.uuid4())
+
+    eval_tags = list(tags) if tags else ["evaluation"]
+    if resolved_id and resolved_id not in eval_tags:
+        eval_tags.append(resolved_id)
+
+    run_meta: dict[str, Any] = {"thread_id": thread_id}
+    if resolved_id:
+        run_meta["example_id"] = resolved_id
+    if metadata:
+        run_meta.update(metadata)
+
+    # Attach tracing metadata and tags to active LangSmith RunTree
+    try:
+        from langsmith.run_helpers import get_current_run_tree
+
+        rt = get_current_run_tree()
+        if rt:
+            rt.add_metadata(run_meta)
+            rt.add_tags(eval_tags)
+    except Exception:
+        pass
+
+    config = config_for(
+        thread_id,
+        inputs.get("sender_email"),
+        tags=eval_tags,
+        metadata=run_meta,
+    )
     log: list[str] = []
     clarification_asked = approval_requested = executed_before_approval = False
 
@@ -55,12 +94,36 @@ def run_example(graph: Any, inputs: dict) -> tuple[RunOutcome, list[str]]:
             executed_before_approval = executed_before_approval or _executed(proposal)
             approved = inputs.get("approval_decision") == "approved"
             log.append(f"approval for {proposal.action_type.value} -> {'approve' if approved else 'reject'}")
+
+            # Attach action_id to trace metadata for current run tree and resumption config
+            config.setdefault("metadata", {})["action_id"] = proposal.action_id
+            try:
+                from langsmith.run_helpers import get_current_run_tree
+
+                rt = get_current_run_tree()
+                if rt:
+                    rt.add_metadata({"action_id": proposal.action_id})
+            except Exception:
+                pass
+
             decide(graph, config, approved=approved)
         else:
             break
 
     state = graph.get_state(config).values
     proposal, policy, fields = state.get("action_proposal"), state.get("policy_result"), state.get("extracted_fields")
+
+    if proposal and proposal.action_id:
+        config.setdefault("metadata", {})["action_id"] = proposal.action_id
+        try:
+            from langsmith.run_helpers import get_current_run_tree
+
+            rt = get_current_run_tree()
+            if rt:
+                rt.add_metadata({"action_id": proposal.action_id})
+        except Exception:
+            pass
+
     outcome: RunOutcome = {
         "fields": fields.model_dump() if fields else {},
         "clarification_asked": clarification_asked,
@@ -94,7 +157,17 @@ def run_langsmith_experiment() -> int:
     graph = build_graph()
 
     def target(inputs: dict) -> dict:
-        outcome, log = run_example(graph, inputs)
+        example_id = inputs.get("example_id")
+        tags = ["evaluation"]
+        if example_id:
+            tags.append(example_id)
+        outcome, log = run_example(
+            graph,
+            inputs,
+            example_id=example_id,
+            tags=tags,
+            metadata={"example_id": example_id} if example_id else {},
+        )
         return dict(outcome) | {"log": log}
 
     results = langsmith_evaluate(
@@ -103,7 +176,7 @@ def run_langsmith_experiment() -> int:
         evaluators=[_langsmith_evaluator(fn) for fn in ALL_EVALUATORS],
         experiment_prefix="helpdesk-graph",
         description="src/agent graph on the 10-request evaluation dataset",
-        metadata={"graph": "src.agent.graph"},
+        metadata={"graph": "src.agent.graph", "tags": ["evaluation"]},
         max_concurrency=1,
     )
     print(f"Experiment: {results.experiment_name}")
@@ -132,7 +205,10 @@ def main() -> int:
         outcome, log = run_example(
             graph,
             example["inputs"],
-            langsmith_extra={"name": example_id, "tags": [example_id], "metadata": {"example_id": example_id}},
+            example_id=example_id,
+            tags=["evaluation", example_id],
+            metadata={"example_id": example_id, **example["metadata"]},
+            langsmith_extra={"name": example_id, "tags": ["evaluation", example_id], "metadata": {"example_id": example_id, **example["metadata"]}},
         )
         results = evaluate(outcome, example["outputs"])
         passed += all(r["score"] for r in results)
