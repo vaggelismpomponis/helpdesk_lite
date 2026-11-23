@@ -185,10 +185,26 @@ def build_approval_actions(action_id: str, thread_id: str) -> list[cl.Action]:
 
 def format_final_response(state_values: dict[str, Any], prefix: str = "") -> str:
     """Format the final assistant response with policy citations (source, doc_id, effective_date)."""
-    base_text = state_values.get("final_response") or "Your request has been processed."
+    import re
+
+    base_text = (state_values.get("final_response") or "Your request has been processed.").strip()
+    policy: Optional[PolicyResult] = state_values.get("policy_result")
+    if policy is not None:
+        # Remove trailing inline "Source: POL-XXX (effective YYYY-MM-DD)." from respond node
+        # so the rich Policy Citation line below does not duplicate it.
+        base_text = re.sub(
+            r"\s*Source:\s*"
+            + re.escape(policy.doc_id)
+            + r"\s*\(effective\s*"
+            + re.escape(policy.effective_date)
+            + r"\)\.?\s*$",
+            "",
+            base_text,
+        ).strip()
+
+    base_text = re.sub(r"\.\.+", ".", base_text)
     lines = [f"{prefix}{base_text}" if prefix else base_text]
 
-    policy: Optional[PolicyResult] = state_values.get("policy_result")
     if policy is not None:
         lines.append(
             f"\n**Policy Citation:** {policy.source} (`{policy.doc_id}`, effective `{policy.effective_date}`)"
@@ -327,7 +343,12 @@ async def on_message(message: cl.Message) -> None:
             )
             await _stream_graph_with_steps(None, config)
         else:
-            inputs = {"thread_id": thread_id, "messages": [{"role": "user", "content": message.content}]}
+            state = await cl.make_async(graph.get_state)(config)
+            prev_messages = (state.values.get("messages") if state and state.values else None) or []
+            inputs = {
+                "thread_id": thread_id,
+                "messages": [*prev_messages, {"role": "user", "content": message.content}],
+            }
             await _stream_graph_with_steps(inputs, config)
 
         state = await cl.make_async(graph.get_state)(config)

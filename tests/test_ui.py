@@ -185,7 +185,10 @@ class TestInterfaceFormattingAndHandlers(unittest.IsolatedAsyncioTestCase):
         from src.agent.models import ActionProposal, ActionStatus, ActionType, PolicyResult
 
         state_values = {
-            "final_response": "Action: reset_credentials [executed].",
+            "final_response": (
+                "Action: reset_credentials [executed]. Credential reset requested.\n"
+                "Source: POL-001 (effective 2026-09-01)."
+            ),
             "policy_result": PolicyResult(
                 text="Policy text",
                 doc_id="POL-001",
@@ -206,6 +209,8 @@ class TestInterfaceFormattingAndHandlers(unittest.IsolatedAsyncioTestCase):
         self.assertIn("POL-001", formatted)
         self.assertIn("2026-09-01", formatted)
         self.assertIn("act-uuid-002", formatted)
+        self.assertNotIn("Source: POL-001", formatted)
+        self.assertNotIn("..", formatted)
 
     def test_format_step_output_all_nodes(self) -> None:
         from src.agent.models import PolicyResult

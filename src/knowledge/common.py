@@ -19,7 +19,7 @@ def pg() -> psycopg.Connection:
         pw = os.getenv("POSTGRES_PASSWORD", "postgres_secure_password")
         db = os.getenv("POSTGRES_DB", "helpdesk")
         url = f"postgresql://{user}:{pw}@{host}:{port}/{db}"
-    return psycopg.connect(url)
+    return psycopg.connect(url, connect_timeout=1)
 
 
 def neo4j_driver() -> Driver:

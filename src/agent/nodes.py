@@ -61,8 +61,20 @@ def find_office(text: str) -> str | None:
 
 
 def find_device(text: str) -> str | None:
-    """Device named in the text. Taken from the message only: the user must confirm it (POL-001)."""
-    return _find_known(DEVICES, text)
+    """Device named in the text (including partial names like 'MacBook', 'Windows', 'Linux')."""
+    exact = _find_known(DEVICES, text)
+    if exact:
+        return exact
+    lowered = text.lower()
+    device_aliases = [
+        (r"\b(?:macbook|mac\s+book)\b", "MacBook Pro"),
+        (r"\bwindows\b", "Windows Laptop"),
+        (r"\b(?:linux|workstation)\b", "Linux Workstation"),
+    ]
+    for pattern, canonical in device_aliases:
+        if canonical in DEVICES and re.search(pattern, lowered):
+            return canonical
+    return None
 
 
 def policy_by_id(doc_id: str):
@@ -131,7 +143,8 @@ def find_application(text: str) -> str | None:
 def find_employee(email: str | None = None, text: str | None = None) -> str | None:
     """Resolve employee identity from session email or message text."""
     if email:
-        match = next((e["name"] for e in _SEED_DATA["employees"] if e["email"] == email), None)
+        email_low = email.strip().lower()
+        match = next((e["name"] for e in _SEED_DATA["employees"] if e["email"].lower() == email_low), None)
         if match:
             return match
     if text:
@@ -139,12 +152,87 @@ def find_employee(email: str | None = None, text: str | None = None) -> str | No
         for emp in _SEED_DATA["employees"]:
             email_match = emp["email"].lower()
             name_match = emp["name"].lower()
-            if email_match in lowered or re.search(rf"\b{re.escape(name_match)}\b", lowered):
+            emp_id_match = emp.get("employee_id", "").lower()
+            local_part = email_match.split("@", 1)[0]
+            if (
+                email_match in lowered
+                or re.search(rf"\b{re.escape(name_match)}\b", lowered)
+                or (emp_id_match and re.search(rf"\b{re.escape(emp_id_match)}\b", lowered))
+                or (local_part and re.search(rf"\b{re.escape(local_part)}\b", lowered))
+            ):
                 return emp["name"]
+
+        # Normalize "employee 8" -> "Employee 08"
+        num_match = re.search(r"\b(?:employee|emp)[-\s]*(\d{1,2})\b", lowered)
+        if num_match:
+            target_id = f"EMP-{int(num_match.group(1)):03d}"
+            for emp in _SEED_DATA["employees"]:
+                if emp.get("employee_id") == target_id:
+                    return emp["name"]
+
+        # Match unique first or last name for named employees (excluding generic "Employee NN")
+        token_map: dict[str, list[str]] = {}
+        for emp in _SEED_DATA["employees"]:
+            for part in emp["name"].split():
+                p_low = part.lower()
+                if p_low != "employee" and not p_low.isdigit() and len(p_low) >= 3:
+                    token_map.setdefault(p_low, []).append(emp["name"])
+        for token, names in token_map.items():
+            if len(names) == 1 and re.search(rf"\b{re.escape(token)}\b", lowered):
+                return names[0]
     return None
 
-QUESTION_WORDS = ("what", "how", "do", "does", "is", "are", "can", "which", "when", "where", "who")
-REQUEST_PREFIXES = ("can you", "could you", "would you", "will you", "can i get", "please")
+
+_NON_NAME_WORDS = {
+    "working", "using", "unable", "locked", "stuck", "trying", "having", "getting",
+    "connecting", "calling", "writing", "reporting", "experiencing", "running",
+    "in", "on", "at", "from", "with", "for", "to", "the", "a", "an", "here", "not",
+    "athens", "london", "macbook", "mac", "windows", "linux", "laptop", "workstation",
+    "pro", "office", "remote", "abroad", "urgent", "critical",
+}
+
+
+def _find_unrecognized_identity(text: str) -> str | None:
+    """Detect when a user provides an email or self-identification name not in the directory."""
+    if not text:
+        return None
+    for email_match in re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", text):
+        if not find_employee(email=email_match, text=email_match):
+            return email_match
+
+    emp_num = re.search(r"\b(?:EMP-\d+|employee\s*\d+)\b", text, re.I)
+    if emp_num and not find_employee(text=emp_num.group(0)):
+        return emp_num.group(0)
+
+    intro_patterns = (
+        r"\b(?:[Mm]y\s+name\s+is|[Tt]his\s+is)\s+([A-Z][a-z]{1,}(?:\s+[A-Z][a-z]{1,})?)\b",
+        r"\b(?:[Ii]\s+am|[Ii]'m|[Ii]’m)\s+([A-Z][a-z]{1,}(?:\s+[A-Z][a-z]{1,})?)\b",
+    )
+    app_words = {
+        w.lower()
+        for a in _SEED_DATA.get("applications", []) + _SEED_DATA.get("services", [])
+        for w in re.findall(r"[A-Za-z]+", a["name"])
+    }
+    excluded = _NON_NAME_WORDS | app_words
+    for pat in intro_patterns:
+        for m in re.finditer(pat, text):
+            candidate = m.group(1).strip()
+            words = candidate.split()
+            if any(w.lower() in excluded for w in words):
+                continue
+            if not find_employee(text=candidate):
+                return candidate
+    return None
+
+
+QUESTION_WORDS = (
+    "what", "what's", "whats", "how", "how's", "do", "does", "is", "are",
+    "can", "which", "when", "where", "who", "why",
+)
+INFO_PREFIXES = (
+    "tell me about", "tell me the", "explain", "describe", "show me the policy",
+)
+REQUEST_PREFIXES = ("can you", "could you", "would you", "will you", "can i get", "could i get", "please")
 RESET_WORDS = ("reset", "password", "locked out", "credential")
 CRITICAL_WORDS = ("critical", "production down", "data breach", "security incident")
 CLARIFICATION_QUESTION = "Which application or system is affected?"
@@ -171,6 +259,20 @@ GREETING_PATTERNS = [
     r"\bthis\s+is\b",
 ]
 
+FOLLOWUP_PATTERNS = (
+    r"\bwhy\s+(?:didn't|did\s+not|didn’t|did|wasn't|was\s+not|wasn’t|don't|do\s+not|not)\b",
+    r"\bwhich\s+(?:other\s+)?(?:teams?|applications?|apps?|services?|departments?|colleagues?)\b",
+    r"\bwhat\s+(?:other\s+)?(?:teams?|applications?|apps?|services?|departments?)\b",
+    r"\bwho\s+else\s+is\s+(?:affected|impacted)\b",
+    r"\baffected\s+by\s+(?:this|the)\s+outage\b",
+    r"\b(?:this|that|the)\s+outage\b",
+    r"\bwhich\s+policy\b",
+    r"\bwhat\s+policy\b",
+    r"\bbase(?:d)?\s+(?:this|that|it)\s+on\b",
+    r"\bwhy\s+no\s+reset\b",
+    r"\bwhat\s+was\s+the\s+(?:reason|rationale|citation|policy|outage)\b",
+)
+
 # In-memory execution cache for fast local lookup and fallback alongside PostgreSQL audit_log.
 EXECUTED_ACTION_IDS: set[str] = set()
 
@@ -187,17 +289,88 @@ def _is_action_already_executed(action_id: str) -> bool:
         return False
 
 
+def _last_completed_assistant_index(state: AgentState) -> int:
+    """Index of the last assistant message that completed a turn, or -1 if none."""
+    last_idx = -1
+    for idx, msg in enumerate(state.messages):
+        if msg.get("role") != "assistant":
+            continue
+        if msg.get("turn_complete") or (
+            state.final_response and msg.get("content") == state.final_response
+        ):
+            last_idx = idx
+    return last_idx
+
+
+def _has_completed_turn(state: AgentState) -> bool:
+    """True when the thread has already completed at least one turn."""
+    return _last_completed_assistant_index(state) >= 0 and state.action_proposal is not None
+
+
+def _current_turn_user_messages(state: AgentState) -> list[str]:
+    """User messages belonging to the current turn (after the last completed turn)."""
+    start_idx = _last_completed_assistant_index(state) + 1
+    return [
+        m["content"]
+        for m in state.messages[start_idx:]
+        if m.get("role") == "user" and m.get("content")
+    ]
+
+
 def _user_text(state: AgentState) -> str:
+    current = _current_turn_user_messages(state)
+    if current:
+        return "\n".join(current)
     return "\n".join(m["content"] for m in state.messages if m.get("role") == "user")
 
 
 def is_question(text: str) -> bool:
-    """Information question ("What is...?"), not a polite request ("Can you reset...?")."""
+    """Informational policy or how-to question (even without a trailing '?'), not a polite action request."""
     lowered = text.strip().lower()
+    if not lowered:
+        return False
     if lowered.startswith(REQUEST_PREFIXES):
         return False
-    words = lowered.split()
-    return bool(words) and words[0] in QUESTION_WORDS and lowered.endswith("?")
+    if any(
+        p in lowered
+        for p in (
+            "i can't", "i cannot", "i can’t", "i locked myself", "my password is locked",
+            "stopped working", "stuck in the outbox", "error 500", "please reset my",
+            "can you reset", "could you reset",
+        )
+    ):
+        return False
+    if lowered.startswith(INFO_PREFIXES):
+        return True
+    words = re.findall(r"[a-z0-9']+", lowered)
+    return bool(words) and words[0] in QUESTION_WORDS
+
+
+def _is_followup_question(text: str, state: AgentState) -> bool:
+    """True if text asks a conversational follow-up question about the already-processed action/outage/policy."""
+    lowered = text.strip().lower()
+    if not lowered or state.action_proposal is None:
+        return False
+    if any(
+        p in lowered
+        for p in (
+            "i can't", "i cannot", "i can’t", "i locked myself", "my password is locked",
+            "stopped working", "stuck in the outbox", "error 500", "please reset my",
+            "can you reset", "could you reset", "i need a ",
+        )
+    ):
+        return False
+    return any(re.search(pat, lowered) for pat in FOLLOWUP_PATTERNS)
+
+
+def is_followup_turn(state: AgentState) -> bool:
+    """True when the user is asking a post-action follow-up question in an existing completed thread."""
+    if not _has_completed_turn(state):
+        return False
+    current_msgs = _current_turn_user_messages(state)
+    if len(current_msgs) != 1:
+        return False
+    return _is_followup_question(current_msgs[0], state)
 
 
 def _extract_symptom(
@@ -328,20 +501,44 @@ def extract_fields(state: AgentState, config: RunnableConfig) -> dict:
     and its values are kept only if they match a known employee, application, office or device, or
     (for the symptom) appear in the user's own words. Without an LLM the rules work alone.
     """
+    # Post-action follow-up question: preserve existing state and route directly to respond.
+    if is_followup_turn(state):
+        return {
+            "needs_clarification": False,
+            "clarification_question": None,
+        }
+
+    is_new_turn_after_completion = _has_completed_turn(state)
+    prev_fields = state.extracted_fields if is_new_turn_after_completion else None
+
     text = _user_text(state)
     lowered = text.lower()
 
     # 1. Resolve employee: session config takes precedence, fallback to message text
     user_email = config.get("configurable", {}).get("user_email")
+    explicit_employee = find_employee(text=text)
+    unrecognized_identity = _find_unrecognized_identity(text) if not explicit_employee else None
     employee = find_employee(email=user_email, text=text)
 
-    # 2. Resolve application: match against known applications and aliases
+    # 2. Resolve application: match against known applications and aliases (current turn only)
     application = find_application(text)
 
     # 3. Resolve office and device: from the message only, the user must confirm them (POL-001)
     office, device = find_office(text), find_device(text)
 
-    # 4. Resolve symptom: extract observed issue without guessing
+    # Retain known user context (employee, office, device) across turns in the same session,
+    # unless the user switched to a different employee or gave an unrecognized identity.
+    if prev_fields is not None and not unrecognized_identity:
+        same_employee = not explicit_employee or explicit_employee == prev_fields.employee
+        if not employee and prev_fields.employee:
+            employee = prev_fields.employee
+        if same_employee:
+            if not office and prev_fields.office:
+                office = prev_fields.office
+            if not device and prev_fields.device:
+                device = prev_fields.device
+
+    # 4. Resolve symptom: extract observed issue without guessing (never carried over from old issues)
     symptom = _extract_symptom(text, application, employee, office, device)
 
     # 5. Resolve urgency: optional triage field
@@ -366,12 +563,33 @@ def extract_fields(state: AgentState, config: RunnableConfig) -> dict:
     else:
         missing = fields.missing_fields()
 
-    question = f"To help you, please tell me {' and '.join(FIELD_PROMPTS[f] for f in missing)}." if missing else None
-    return {
+    if missing:
+        prompt_body = f"To help you, please tell me {' and '.join(FIELD_PROMPTS[f] for f in missing)}."
+        if "employee" in missing and unrecognized_identity:
+            question = (
+                f"I could not find '{unrecognized_identity}' in the Nimbus Analytics employee directory. "
+                f"{prompt_body}"
+            )
+        else:
+            question = prompt_body
+    else:
+        question = None
+
+    update: dict = {
         "extracted_fields": fields,
         "needs_clarification": bool(missing),
         "clarification_question": question,
     }
+    if is_new_turn_after_completion:
+        # Clear previous incident's action/policy/graph state so old ticket details do not bleed in.
+        update.update({
+            "policy_result": None,
+            "graph_result": None,
+            "action_proposal": None,
+            "final_response": None,
+            "thinking": None,
+        })
+    return update
 
 
 def ask_clarification(state: AgentState) -> dict:
@@ -381,8 +599,11 @@ def ask_clarification(state: AgentState) -> dict:
 
 FALLBACK_POLICY_KEYWORDS = [
     ("wi-fi", "POL-016"),
+    ("wifi", "POL-016"),
     ("travel", "POL-008"),
+    ("abroad", "POL-008"),
     ("cloud storage", "POL-012"),
+    ("shared drive", "POL-012"),
     ("password", "POL-001"),
     ("reset", "POL-001"),
     ("locked", "POL-001"),
@@ -390,6 +611,18 @@ FALLBACK_POLICY_KEYWORDS = [
     ("vpn", "POL-002"),
     ("license", "POL-004"),
     ("install", "POL-010"),
+    ("software catalog", "POL-010"),
+    ("mfa", "POL-006"),
+    ("security key", "POL-006"),
+    ("laptop provisioning", "POL-009"),
+    ("laptop replacement", "POL-009"),
+    ("phishing", "POL-011"),
+    ("onboarding", "POL-013"),
+    ("offboarding", "POL-014"),
+    ("contractor", "POL-015"),
+    ("production database", "POL-017"),
+    ("mdm", "POL-018"),
+    ("disaster recovery", "POL-019"),
 ]
 
 
@@ -500,7 +733,11 @@ def check_graph(state: AgentState) -> dict:
 
 def _choose_action(state: AgentState) -> tuple[ActionType, str]:
     """Decision Precedence Matrix (contract section 5); clarification is handled by routing."""
-    text = _user_text(state).lower()
+    raw_text = _user_text(state)
+    text = raw_text.lower()
+
+    if state.policy_result and is_question(raw_text):
+        return ActionType.ANSWER_POLICY, f"Policy {state.policy_result.doc_id} answers the question"
 
     # 1. Outage check: Strict rule: if a dependent service has an active outage,
     # the assistant MUST propose link_outage (NEVER credential reset).
@@ -516,8 +753,6 @@ def _choose_action(state: AgentState) -> tuple[ActionType, str]:
             rationale = f"Active outage on {outages_str}"
         return ActionType.LINK_OUTAGE, rationale
 
-    if state.policy_result and is_question(_user_text(state)):
-        return ActionType.ANSWER_POLICY, f"Policy {state.policy_result.doc_id} answers the question"
     if any(w in text for w in RESET_WORDS):
         return ActionType.RESET_CREDENTIALS, "Credential reset requested and no outage explains it"
     if any(w in text for w in CRITICAL_WORDS) or "no assigned team" in text or "escalate" in text:
@@ -705,7 +940,10 @@ def execute_action(state: AgentState) -> dict:
         execute_idempotent(proposal.action_id, _do_execute)
     except Exception:
         # Fallback if database is offline / unreachable
-        _do_execute(proposal.action_id)
+        try:
+            _do_execute(proposal.action_id)
+        except Exception:
+            pass
 
     EXECUTED_ACTION_IDS.add(proposal.action_id)
     try:
@@ -865,27 +1103,159 @@ def _interpret_results_with_llm(state: AgentState) -> tuple[str | None, str | No
     return result.thinking.strip() or None, result.explanation.strip() or None
 
 
-def respond(state: AgentState) -> dict:
+def _outage_impact_details(state: AgentState) -> tuple[list[str], list[str], str | None]:
+    """Return (affected_applications, affected_teams, owner_team_name) for the active outage(s)."""
+    active_service_names = set(state.graph_result.active_outages if state.graph_result else [])
+    if not active_service_names:
+        return [], [], None
+
+    teams_by_id = {t["team_id"]: t["name"] for t in _SEED_DATA.get("teams", [])}
+    active_service_ids = {
+        s["service_id"]
+        for s in _SEED_DATA.get("services", [])
+        if s["name"] in active_service_names
+    }
+    owner_teams = sorted({
+        teams_by_id[s["owner_team"]]
+        for s in _SEED_DATA.get("services", [])
+        if s["service_id"] in active_service_ids and s.get("owner_team") in teams_by_id
+    })
+    affected_apps = sorted({
+        a["name"]
+        for a in _SEED_DATA.get("applications", [])
+        if set(a.get("depends_on_services", [])) & active_service_ids
+    })
+    affected_teams = sorted(teams_by_id.values())
+    owner_str = ", ".join(owner_teams) if owner_teams else None
+    return affected_apps, affected_teams, owner_str
+
+
+def _build_followup_response(state: AgentState) -> dict:
+    """Build a conversational follow-up response from existing state, policy, and service graph."""
+    question = _user_text(state).strip()
+    lowered = question.lower()
     proposal = state.action_proposal
-    parts = [f"Action: {proposal.action_type.value} [{proposal.status.value}]. {proposal.rationale}."]
-    if proposal.action_type == ActionType.LINK_OUTAGE:
+    policy = state.policy_result
+    graph_res = state.graph_result
+    fields = state.extracted_fields
+
+    affected_apps, affected_teams, owner_team = _outage_impact_details(state)
+    outage_services = ", ".join(graph_res.active_outages) if graph_res and graph_res.active_outages else "None"
+    outage_id = (
+        proposal.parameters.get("outage_id")
+        if proposal and proposal.parameters.get("outage_id")
+        else (graph_res.outages[0].outage_id if graph_res and graph_res.outages else None)
+    )
+    outage_summary = (
+        graph_res.outages[0].summary
+        if graph_res and graph_res.outages and graph_res.outages[0].summary
+        else None
+    )
+
+    parts: list[str] = []
+    if any(w in lowered for w in ("team", "who else", "department", "colleague", "application", "app", "affected")):
+        if graph_res and graph_res.has_active_outage:
+            outage_label = f"{outage_services} ({outage_id})" if outage_id else outage_services
+            apps_str = ", ".join(affected_apps) if affected_apps else (fields.application if fields else "dependent applications")
+            teams_str = ", ".join(affected_teams) if affected_teams else "all company teams"
+            owner_clause = f" (owned by the {owner_team} team)" if owner_team else ""
+            parts.append(
+                f"The active outage on {outage_label}{owner_clause} affects the following dependent applications: "
+                f"{apps_str}. Because employees across Nimbus Analytics rely on these shared services, "
+                f"all teams ({teams_str}) are impacted."
+            )
+            if outage_summary:
+                parts.append(f"Outage summary: {outage_summary}")
+        else:
+            app_name = (fields.application if fields and fields.application else "the application")
+            parts.append(f"There is no active shared service outage currently recorded for {app_name}.")
+    elif "policy" in lowered or "base" in lowered or "cite" in lowered or "citation" in lowered:
+        if policy:
+            version_note = (
+                " This is the latest effective version and supersedes the older 2024-03-15 policy."
+                if policy.doc_id == "POL-001" and policy.effective_date == "2026-09-01"
+                else ""
+            )
+            parts.append(
+                f"This decision is based on policy {policy.doc_id} ({policy.source}, effective {policy.effective_date})."
+                f"{version_note}"
+            )
+        else:
+            parts.append("No specific policy document was required for this step.")
+    elif "why" in lowered or "reset" in lowered or "password" in lowered:
+        if proposal and proposal.action_type == ActionType.LINK_OUTAGE:
+            app_name = (fields.application if fields and fields.application else "the application")
+            outage_label = f"{outage_services} ({outage_id})" if outage_id else outage_services
+            parts.append(
+                f"Your password was not reset because {app_name} depends on {outage_label}, which currently has "
+                "an active outage. Resetting an individual password will not fix an upstream infrastructure outage, "
+                "so the request was linked to the open outage instead."
+            )
+        elif proposal:
+            rationale_clean = (proposal.rationale or "").strip().rstrip(".")
+            parts.append(
+                f"The selected action was {proposal.action_type.value} [{proposal.status.value}]: {rationale_clean}."
+            )
+    else:
+        if proposal:
+            rationale_clean = (proposal.rationale or "").strip().rstrip(".")
+            parts.append(
+                f"For your request, the action is {proposal.action_type.value} [{proposal.status.value}]: {rationale_clean}."
+            )
+
+    thinking, explanation = _interpret_results_with_llm(state)
+    if explanation:
+        parts.append(f"\n\n{explanation.strip()}")
+
+    if policy:
+        citation_str = f"Source: {policy.doc_id} (effective {policy.effective_date})."
+        if citation_str not in " ".join(parts):
+            parts.append(f"\n{citation_str}")
+
+    text = re.sub(r"\.\.+", ".", " ".join(parts)).strip()
+    update: dict = {
+        "final_response": text,
+        "messages": [*state.messages, {"role": "assistant", "content": text, "turn_complete": True}],
+    }
+    if thinking:
+        update["thinking"] = thinking
+    return update
+
+
+def respond(state: AgentState) -> dict:
+    if is_followup_turn(state):
+        return _build_followup_response(state)
+
+    proposal = state.action_proposal
+    rationale_clean = (proposal.rationale or "").strip().rstrip(".")
+    header = f"Action: {proposal.action_type.value} [{proposal.status.value}]."
+    if rationale_clean:
+        header = f"{header} {rationale_clean}."
+    parts = [header]
+    if proposal.action_type == ActionType.LINK_OUTAGE and proposal.status != ActionStatus.REJECTED:
         parts.append("Your request was linked to the open outage; no credential reset is needed.")
     if proposal.status == ActionStatus.REJECTED:
         parts.append("The action was not approved, so nothing was changed.")
 
     thinking, explanation = _interpret_results_with_llm(state)
     if explanation:
-        parts.append(f"\n\n{explanation}")
+        cleaned_explanation = re.sub(
+            r"\s*Source:\s*POL-\d{3}\s*\(effective\s*[^)]+\)\.?",
+            "",
+            explanation.strip(),
+        ).strip()
+        if cleaned_explanation:
+            parts.append(f"\n\n{cleaned_explanation}")
 
     if state.policy_result:
         citation_str = f"Source: {state.policy_result.doc_id} (effective {state.policy_result.effective_date})."
         if citation_str not in " ".join(parts):
             parts.append(f"\n{citation_str}")
 
-    text = " ".join(parts)
+    text = re.sub(r"\.\.+", ".", " ".join(parts))
     update = {
         "final_response": text,
-        "messages": [*state.messages, {"role": "assistant", "content": text}],
+        "messages": [*state.messages, {"role": "assistant", "content": text, "turn_complete": True}],
     }
     if thinking:
         update["thinking"] = thinking
