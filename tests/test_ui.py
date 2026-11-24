@@ -34,9 +34,10 @@ def _install_stub_modules() -> tuple[dict[str, types.ModuleType], list[dict]]:
             self.actions = []
 
     class StubAction:
-        def __init__(self, name: str, payload: dict, label: str = "") -> None:
+        def __init__(self, name: str, payload: dict | None = None, label: str = "", value: str = "") -> None:
             self.name = name
-            self.payload = payload
+            self.payload = payload or {}
+            self.value = value
             self.label = label
             self.removed = False
 
@@ -90,59 +91,56 @@ class TestInterfaceContracts(unittest.TestCase):
 class TestInterfaceFormattingAndHandlers(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls._need_stubs = False
-        try:
-            import chainlit  # noqa: F401
-            import src.app  # noqa: F401
-        except ImportError:
-            cls._need_stubs = True
-            _, cls.sent_messages = _install_stub_modules()
-            # Stub pydantic/langgraph dependencies if not installed in host python
-            if "src.agent.models" not in sys.modules:
-                models_mod = types.ModuleType("src.agent.models")
+        cls._need_stubs = True
+        _, cls.sent_messages = _install_stub_modules()
+        # Stub pydantic/langgraph dependencies if not installed in host python
+        if "src.agent.models" not in sys.modules:
+            models_mod = types.ModuleType("src.agent.models")
 
-                class ActionStatus:
-                    PENDING = SimpleNamespace(value="pending")
-                    APPROVED = SimpleNamespace(value="approved")
-                    EXECUTED = SimpleNamespace(value="executed")
-                    REJECTED = SimpleNamespace(value="rejected")
+            class ActionStatus:
+                PENDING = SimpleNamespace(value="pending")
+                APPROVED = SimpleNamespace(value="approved")
+                EXECUTED = SimpleNamespace(value="executed")
+                REJECTED = SimpleNamespace(value="rejected")
 
-                class ActionType:
-                    RESET_CREDENTIALS = SimpleNamespace(value="reset_credentials")
-                    LINK_OUTAGE = SimpleNamespace(value="link_outage")
+            class ActionType:
+                RESET_CREDENTIALS = SimpleNamespace(value="reset_credentials")
+                LINK_OUTAGE = SimpleNamespace(value="link_outage")
 
-                class ActionProposal:
-                    def __init__(self, **kwargs):
-                        self.__dict__.update(kwargs)
+            class ActionProposal:
+                def __init__(self, **kwargs):
+                    self.__dict__.update(kwargs)
 
-                    def model_copy(self, update: dict):
-                        data = dict(self.__dict__)
-                        data.update(update)
-                        return ActionProposal(**data)
+                def model_copy(self, update: dict):
+                    data = dict(self.__dict__)
+                    data.update(update)
+                    return ActionProposal(**data)
 
-                class PolicyResult:
-                    def __init__(self, **kwargs):
-                        self.__dict__.update(kwargs)
+            class PolicyResult:
+                def __init__(self, **kwargs):
+                    self.__dict__.update(kwargs)
 
-                class GraphResult:
-                    def __init__(self, **kwargs):
-                        self.__dict__.update(kwargs)
+            class GraphResult:
+                def __init__(self, **kwargs):
+                    self.__dict__.update(kwargs)
 
-                models_mod.ActionStatus = ActionStatus
-                models_mod.ActionType = ActionType
-                models_mod.ActionProposal = ActionProposal
-                models_mod.PolicyResult = PolicyResult
-                models_mod.GraphResult = GraphResult
-                sys.modules["src.agent.models"] = models_mod
+            models_mod.ActionStatus = ActionStatus
+            models_mod.ActionType = ActionType
+            models_mod.ActionProposal = ActionProposal
+            models_mod.PolicyResult = PolicyResult
+            models_mod.GraphResult = GraphResult
+            sys.modules["src.agent.models"] = models_mod
 
-            if "src.agent.graph" not in sys.modules:
-                graph_mod = types.ModuleType("src.agent.graph")
-                graph_mod.config_for = lambda tid, user_email=None: {
-                    "configurable": {"thread_id": tid, "user_email": user_email}
-                }
-                graph_mod.get_production_graph = lambda: MagicMock()
-                graph_mod.pending = lambda g, c: None
-                sys.modules["src.agent.graph"] = graph_mod
+        if "src.agent.graph" not in sys.modules:
+            graph_mod = types.ModuleType("src.agent.graph")
+            graph_mod.config_for = lambda tid, user_email=None, **kw: {
+                "configurable": {"thread_id": tid, "user_email": user_email},
+                "metadata": {"thread_id": tid, **kw.get("metadata", {})},
+                "tags": kw.get("tags", []),
+            }
+            graph_mod.get_production_graph = lambda: MagicMock()
+            graph_mod.pending = lambda g, c: None
+            sys.modules["src.agent.graph"] = graph_mod
 
     def setUp(self) -> None:
         import src.app as ui_app
@@ -187,7 +185,10 @@ class TestInterfaceFormattingAndHandlers(unittest.IsolatedAsyncioTestCase):
         from src.agent.models import ActionProposal, ActionStatus, ActionType, PolicyResult
 
         state_values = {
-            "final_response": "Action: reset_credentials [executed].",
+            "final_response": (
+                "Action: reset_credentials [executed]. Credential reset requested.\n"
+                "Source: POL-001 (effective 2026-09-01)."
+            ),
             "policy_result": PolicyResult(
                 text="Policy text",
                 doc_id="POL-001",
@@ -208,6 +209,8 @@ class TestInterfaceFormattingAndHandlers(unittest.IsolatedAsyncioTestCase):
         self.assertIn("POL-001", formatted)
         self.assertIn("2026-09-01", formatted)
         self.assertIn("act-uuid-002", formatted)
+        self.assertNotIn("Source: POL-001", formatted)
+        self.assertNotIn("..", formatted)
 
     def test_format_step_output_all_nodes(self) -> None:
         from src.agent.models import PolicyResult
@@ -228,6 +231,13 @@ class TestInterfaceFormattingAndHandlers(unittest.IsolatedAsyncioTestCase):
 
         out_missing = self.ui_app.format_step_output("retrieve_policy", {"policy_result": None})
         self.assertIn("No matching policy found", out_missing)
+
+        out_respond_thinking = self.ui_app.format_step_output(
+            "respond",
+            {"thinking": "SSO outage causes VPN failure.", "final_response": "Action: link_outage."}
+        )
+        self.assertIn("Thinking / Interpretation:", out_respond_thinking)
+        self.assertIn("SSO outage causes VPN failure.", out_respond_thinking)
 
     async def test_double_click_prevention(self) -> None:
         import chainlit as cl
@@ -261,9 +271,11 @@ class TestInterfaceFormattingAndHandlers(unittest.IsolatedAsyncioTestCase):
         self.ui_app.graph = mock_graph
         self.ui_app.pending = MagicMock(return_value="approval")
 
+        import json
+
         action = cl.Action(
             name="approve_action",
-            payload={"decision": "approve", "action_id": "act-double-click", "thread_id": "sess-123"},
+            value=json.dumps({"decision": "approve", "action_id": "act-double-click", "thread_id": "sess-123"}),
             label="Approve",
         )
         await self.ui_app.on_approve(action)

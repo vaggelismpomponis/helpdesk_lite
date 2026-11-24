@@ -35,20 +35,20 @@
 
 ## Role checklist
 
-- [ ] Συμφωνία ομάδας καταγεγραμμένη στο `CONTRIBUTING_LOG.md`
-- [ ] Board με tasks
-- [ ] Draft `CONTRIBUTING.md`
-- [ ] LangSmith project και tracing ενεργό
-- [ ] Σχέδιο 10 requests με αναμενόμενα αποτελέσματα
-- [ ] Evaluators (action, citation, approval, clarification)
-- [ ] Dataset ανεβασμένο στο LangSmith
-- [ ] Clean-clone test συντονισμένο (Ημ. 5)
+- [x] Συμφωνία ομάδας καταγεγραμμένη στο `CONTRIBUTING_LOG.md`
+- [x] Board με tasks
+- [x] Draft `CONTRIBUTING.md`
+- [x] LangSmith project και tracing ενεργό
+- [x] Σχέδιο 10 requests με αναμενόμενα αποτελέσματα
+- [x] Evaluators (action, citation, approval, clarification)
+- [x] Dataset ανεβασμένο στο LangSmith
+- [x] Clean-clone test συντονισμένο (Ημ. 5)
 - [ ] Restart test scenario γραμμένο και εκτελεσμένο
-- [ ] Evaluation run: 10/10 με αναμενόμενες ενέργειες
+- [x] Evaluation run: 10/10 με αναμενόμενες ενέργειες
 - [ ] Demo script και seed data
 - [ ] ≥2 πρόβες με rotation
 - [ ] Final `CONTRIBUTING.md` merged
-- [ ] Project checklist επαληθευμένο (Definition of Done)
+- [x] Project checklist επαληθευμένο (Definition of Done)
 - [ ] Έχω commits και τουλάχιστον ένα review σε PR άλλου ρόλου
 - [ ] Μπορώ να εξηγήσω ολόκληρη τη ροή
 

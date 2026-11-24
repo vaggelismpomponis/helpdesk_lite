@@ -238,8 +238,11 @@ def check_graph(application: str) -> GraphResult:
 | Standard issue requiring investigation | `ActionType.OPEN_TICKET` | **Yes** | `human_approval` (Interrupt) |
 | Critical incident or VIP employee | `ActionType.ESCALATE` | **Yes** | `human_approval` (Interrupt) |
 
-*Citation Rule:* Every action cites a policy. When the request matches no policy, the policy that governs the chosen
-action is cited instead: `LINK_OUTAGE` → POL-003, `OPEN_TICKET` → POL-004, `ESCALATE` → POL-005.
+*Citation Rule:* Every action cites a policy. `ANSWER_POLICY` cites the semantic match. The other actions cite the
+policy whose topic the request names explicitly (for example "reset" → POL-001, "cloud storage" → POL-012), otherwise
+the policy that governs the action: `RESET_CREDENTIALS` → POL-001, `LINK_OUTAGE` → POL-003, `OPEN_TICKET` → POL-004,
+`ESCALATE` → POL-005. For these actions the nearest semantic match is not cited, because with
+real embeddings an unrelated policy can rank first.
 
 ---
 

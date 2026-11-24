@@ -1,8 +1,10 @@
-"""Graph skeleton: routing, interrupts, approval and idempotency with mock nodes."""
+"""Graph skeleton and completion: routing, interrupts, approval, idempotency, and live Knowledge tools."""
 
 import uuid
 
 import pytest
+from langchain_core.runnables import RunnableLambda
+from langchain_core.tools import StructuredTool
 from langgraph.checkpoint.memory import MemorySaver
 
 from src.agent import nodes
@@ -15,7 +17,15 @@ from src.agent.graph import (
     reply,
     start,
 )
-from src.agent.models import ActionProposal, ActionStatus, ActionType, AgentState
+from src.agent.models import (
+    ActionProposal,
+    ActionStatus,
+    ActionType,
+    AgentState,
+    ExtractedFields,
+    PolicyResult,
+    ResponseInterpretation,
+)
 from src.db.checkpointer import PostgresSaver
 from src.db.connection import get_pooled_connection, is_postgres_available
 
@@ -60,7 +70,8 @@ def test_outage_links_instead_of_resetting(graph):
     result = start(graph, config, "I can't connect to the VPN, please reset my password" + AT_DESK)
     proposal = result["action_proposal"]
     assert proposal.action_type == ActionType.LINK_OUTAGE
-    assert not proposal.requires_approval
+    assert proposal.requires_approval
+    assert pending(graph, config) == "approval"
     assert "Identity Provider (SSO)" in result["graph_result"].active_outages
     # Latest version of the reset policy, not v1.
     assert result["policy_result"].effective_date == "2026-09-01"
@@ -182,7 +193,47 @@ def test_outage_without_matching_policy_cites_outage_policy(graph):
     result = start(graph, config, "My outgoing emails in Email & Calendar are stuck in the outbox." + AT_DESK)
     assert result["action_proposal"].action_type == ActionType.LINK_OUTAGE
     assert result["policy_result"].doc_id == "POL-003"
+    assert pending(graph, config) == "approval"
+    result = decide(graph, config, approved=True)
     assert "POL-003" in result["final_response"]
+
+
+UNRELATED_POLICY = PolicyResult(
+    text="Employees connecting from abroad must notify IT.", doc_id="POL-008",
+    effective_date="2026-01-10", source="POL-008_remote_work_and_travel_security.md",
+)
+
+
+
+def stub_tool(name, result):
+    """LangChain tool with the same arguments as the Knowledge tool, returning a fixed result."""
+    return StructuredTool.from_function(
+        func=lambda query, application=None: result, name=name, description=f"Stub {name}"
+    )
+
+@pytest.mark.parametrize(
+    ("request_text", "expected_action", "expected_doc"),
+    [
+        ("My outgoing emails in Email & Calendar are stuck in the outbox.", ActionType.LINK_OUTAGE, "POL-003"),
+        ("I need a Docker Desktop license installed.", ActionType.OPEN_TICKET, "POL-004"),
+        ("I can't connect to the VPN, can you reset my access?", ActionType.LINK_OUTAGE, "POL-001"),
+        ("I locked myself out of the ERP System after typing my password wrong.", ActionType.RESET_CREDENTIALS, "POL-001"),
+    ],
+)
+def test_action_citation_ignores_unrelated_semantic_match(graph, monkeypatch, request_text, expected_action, expected_doc):
+    """With real embeddings an unrelated policy can rank first (EVAL-06, EVAL-09); actions cite the
+    policy the request names, otherwise the policy that governs them."""
+    monkeypatch.setattr(nodes, "knowledge_retrieve_policy", stub_tool("retrieve_policy", UNRELATED_POLICY))
+    result = start(graph, new_config(), request_text + AT_DESK)
+    assert result["action_proposal"].action_type == expected_action
+    assert result["policy_result"].doc_id == expected_doc
+
+
+def test_policy_answer_keeps_semantic_match(graph, monkeypatch):
+    monkeypatch.setattr(nodes, "knowledge_retrieve_policy", stub_tool("retrieve_policy", UNRELATED_POLICY))
+    result = start(graph, new_config(EMP02), "How early must I notify IT before working abroad?")
+    assert result["action_proposal"].action_type == ActionType.ANSWER_POLICY
+    assert result["policy_result"].doc_id == "POL-008"
 
 
 def test_extract_fields_missing_employee_identifies_and_asks(graph):
@@ -374,3 +425,579 @@ def test_build_graph_use_postgres_factory():
 
     pg_graph = build_graph(use_postgres=True)
     assert pg_graph is not None
+
+
+# ==============================================================================
+# Step 8 / Issue #28: Live Knowledge Tools Integration & Mocks Decommissioning
+# ==============================================================================
+
+
+def test_mocks_completely_decommissioned_from_nodes():
+    """Verify that nodes module does not import or depend on src.agent.mocks."""
+    assert "mocks" not in nodes.__dict__, "src.agent.nodes must not import or contain 'mocks'"
+    import inspect
+    source = inspect.getsource(nodes)
+    assert "import mocks" not in source, "src.agent.nodes must not import mocks"
+    assert "from src.agent import mocks" not in source, "src.agent.nodes must not import mocks from src.agent"
+
+
+@requires_postgres
+def test_live_retrieve_policy_and_check_graph_state_transitions(graph):
+    """Validate live pgvector and Neo4j queries execute in graph state transitions."""
+    config = new_config()
+    # Live outage on Corporate VPN -> Identity Provider (SSO)
+    result = start(graph, config, "I cannot connect to Corporate VPN, please reset my password" + AT_DESK)
+    assert result["graph_result"] is not None
+    assert result["graph_result"].found is True
+    assert "Identity Provider (SSO)" in result["graph_result"].active_outages
+    assert result["graph_result"].has_active_outage is True
+
+    # Real policy retrieval from pgvector (citations with doc_id, effective_date, source)
+    assert result["policy_result"] is not None
+    assert result["policy_result"].doc_id in ("POL-001", "POL-002")
+    assert result["policy_result"].effective_date is not None
+    assert result["policy_result"].source.endswith(".md")
+
+    # Action proposal decided based on live tools
+    proposal = result["action_proposal"]
+    assert proposal.action_type == ActionType.LINK_OUTAGE
+    assert proposal.requires_approval is True
+
+
+# ==============================================================================
+# Step 9 / Issue #29: Decision Rules (Active Outage -> Link to Outage)
+# ==============================================================================
+
+
+def test_decision_rules_active_outage_inhibits_credential_reset(graph):
+    """Enforce strict rule: active outage on dependent service MUST propose link_outage (NEVER reset_credentials)."""
+    config = new_config()
+    result = start(graph, config, "Corporate VPN credentials not working, please reset my password" + AT_DESK)
+    proposal = result["action_proposal"]
+
+    # Acceptance criteria: active outage triggers link to outage
+    assert proposal.action_type == ActionType.LINK_OUTAGE
+    # Acceptance criteria: credential reset is strictly inhibited
+    assert proposal.action_type != ActionType.RESET_CREDENTIALS
+    assert proposal.requires_approval
+    assert proposal.status == ActionStatus.PENDING
+    assert pending(graph, config) == "approval"
+    assert "inhibited" in proposal.rationale.lower()
+    assert "Identity Provider (SSO)" in proposal.rationale
+    assert "Identity Provider (SSO)" in result["graph_result"].active_outages
+    result = decide(graph, config, approved=True)
+    assert "link_outage" in result["final_response"]
+
+
+def test_decision_rules_multiple_applications_in_dependency_tree(graph):
+    """Evaluate service dependency tree across different applications sharing degraded service."""
+    # Finance Portal depends on SRV-01 (Identity Provider (SSO) with OPEN outage)
+    config1 = new_config()
+    res1 = start(graph, config1, "Finance Portal login failed, please reset my password" + AT_DESK)
+    assert res1["action_proposal"].action_type == ActionType.LINK_OUTAGE
+    assert res1["action_proposal"].action_type != ActionType.RESET_CREDENTIALS
+
+    # GitHub Enterprise also depends on SRV-01 (Identity Provider (SSO))
+    config2 = new_config()
+    res2 = start(graph, config2, "GitHub Enterprise account locked out, need password reset" + AT_DESK)
+    assert res2["action_proposal"].action_type == ActionType.LINK_OUTAGE
+    assert res2["action_proposal"].action_type != ActionType.RESET_CREDENTIALS
+
+
+def test_decision_rules_healthy_service_allows_credential_reset(graph):
+    """When dependent services are operational (no outages), credential reset proceeds normally with approval."""
+    # ERP System depends on SRV-03 (PostgreSQL) and SRV-07 (API Gateway), neither has an active outage
+    config = new_config()
+    result = start(graph, config, "My ERP System password expired, please reset my credentials" + AT_DESK)
+    proposal = result["action_proposal"]
+
+    assert proposal.action_type == ActionType.RESET_CREDENTIALS
+    assert proposal.requires_approval is True
+    assert proposal.status == ActionStatus.PENDING
+    assert pending(graph, config) == "approval"
+
+
+def test_decision_rules_direct_service_outage(graph):
+    """Direct mention of degraded service triggers link to outage."""
+    config = new_config()
+    result = start(graph, config, "Identity Provider (SSO) is broken, please reset my password" + AT_DESK)
+    proposal = result["action_proposal"]
+
+    assert proposal.action_type == ActionType.LINK_OUTAGE
+    assert proposal.requires_approval is True
+
+
+def test_decision_rules_outage_proposal_parameters(graph):
+    """ActionProposal parameters contain outage tracking metadata."""
+    config = new_config()
+    result = start(graph, config, "I cannot connect to Corporate VPN, reset my password" + AT_DESK)
+    params = result["action_proposal"].parameters
+
+    assert "Identity Provider (SSO)" in params.get("active_outages", [])
+    assert params.get("outage_id") == "OUT-2026-01"
+
+
+# ==============================================================================
+# Step 10 / Issue #30: Idempotent Action Execution & Status Tracking
+# ==============================================================================
+
+
+@requires_postgres
+def test_idempotent_execution_persists_action_status_lifecycle_in_audit_log(graph):
+    """Verify action_id tracking and atomic lifecycle (pending -> approved -> executed) in audit_log."""
+    config = new_config()
+    thread_id = config["configurable"]["thread_id"]
+
+    # 1. Propose state-changing action -> status must be 'pending' in audit_log
+    start(graph, config, "My ERP System password is locked out, please reset it" + AT_DESK)
+    snapshot = graph.get_state(config)
+    proposal = snapshot.values["action_proposal"]
+    action_id = proposal.action_id
+
+    try:
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT action_id, thread_id, action_type, status, executed_at FROM audit_log WHERE action_id = %s;",
+                    (action_id,),
+                )
+                row = cur.fetchone()
+                assert row is not None, "Action must be persisted in audit_log upon proposal"
+                assert row[0] == action_id
+                assert row[1] == thread_id
+                assert row[2] == ActionType.RESET_CREDENTIALS.value
+                assert row[3] == "pending", "Proposed action must initially have pending status"
+                assert row[4] is None, "executed_at must be NULL before execution"
+
+        # 2. Approve and execute action -> status must update to 'executed' with timestamp
+        result = decide(graph, config, approved=True)
+        assert result["action_proposal"].status == ActionStatus.EXECUTED
+
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT status, executed_at FROM audit_log WHERE action_id = %s;",
+                    (action_id,),
+                )
+                row = cur.fetchone()
+                assert row is not None
+                assert row[0] == "executed", "Status in audit_log must be atomically updated to executed"
+                assert row[1] is not None, "executed_at must be recorded upon successful execution"
+
+    finally:
+        with get_pooled_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM audit_log WHERE action_id = %s;", (action_id,))
+
+
+@requires_postgres
+def test_idempotent_execution_guard_blocks_duplicate_execution_and_replay(graph):
+    """Verify idempotent execution guard rejects re-execution even if in-memory cache is cleared (process restart)."""
+    config = new_config()
+    start(graph, config, "My ERP System password is locked out, please reset it" + AT_DESK)
+    result = decide(graph, config, approved=True)
+    proposal = result["action_proposal"]
+    action_id = proposal.action_id
+
+    try:
+        # Clear in-memory executed action set to simulate container/process restart
+        nodes.EXECUTED_ACTION_IDS.discard(action_id)
+        assert action_id not in nodes.EXECUTED_ACTION_IDS
+
+        # Attempt to re-execute the same action
+        re_result = nodes.execute_action(AgentState(action_proposal=proposal, thread_id=config["configurable"]["thread_id"]))
+        assert re_result["action_proposal"].status == ActionStatus.EXECUTED
+
+        # Verify audit_log row remains intact with terminal executed status
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT status, executed_at FROM audit_log WHERE action_id = %s;",
+                    (action_id,),
+                )
+                row = cur.fetchone()
+                assert row[0] == "executed"
+                assert row[1] is not None
+
+    finally:
+        with get_pooled_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM audit_log WHERE action_id = %s;", (action_id,))
+
+
+@requires_postgres
+def test_open_ticket_action_creates_idempotent_ticket_in_db(graph):
+    """Verify OPEN_TICKET action creates ticket record in database and is completely idempotent against duplicates."""
+    config = new_config()
+    start(graph, config, "The ERP System report export fails with error 500" + AT_DESK)
+    result = decide(graph, config, approved=True)
+    proposal = result["action_proposal"]
+    action_id = proposal.action_id
+
+    assert proposal.action_type == ActionType.OPEN_TICKET
+    assert proposal.status == ActionStatus.EXECUTED
+
+    try:
+        # Verify ticket was created in PostgreSQL tickets table
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT action_id, employee, application, status, symptom, urgency FROM tickets WHERE action_id = %s;",
+                    (action_id,),
+                )
+                ticket = cur.fetchone()
+                assert ticket is not None, "Ticket must be persisted in tickets table"
+                assert ticket[0] == action_id
+                assert ticket[1] == "Maria Papadopoulou"
+                assert ticket[2] == "ERP System"
+                assert ticket[3] == "pending"
+
+        # Simulate replay or duplicate node invocation
+        nodes.EXECUTED_ACTION_IDS.discard(action_id)
+        re_result = nodes.execute_action(
+            AgentState(
+                action_proposal=proposal,
+                thread_id=config["configurable"]["thread_id"],
+                extracted_fields=result["extracted_fields"],
+            )
+        )
+        assert re_result["action_proposal"].status == ActionStatus.EXECUTED
+
+        # Verify no duplicate ticket was created
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT count(*) FROM tickets WHERE action_id = %s;",
+                    (action_id,),
+                )
+                count = cur.fetchone()[0]
+                assert count == 1, "There must be exactly one ticket per action_id"
+
+    finally:
+        with get_pooled_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM tickets WHERE action_id = %s;", (action_id,))
+                    cur.execute("DELETE FROM audit_log WHERE action_id = %s;", (action_id,))
+
+
+@requires_postgres
+def test_unapproved_action_rejected_and_not_executed(graph):
+    """Verify unapproved action is persisted as rejected in audit_log and never creates side-effects."""
+    config = new_config()
+    start(graph, config, "The ERP System report export fails with error 500" + AT_DESK)
+    result = decide(graph, config, approved=False)
+    proposal = result["action_proposal"]
+    action_id = proposal.action_id
+
+    assert proposal.status == ActionStatus.REJECTED
+    assert action_id not in nodes.EXECUTED_ACTION_IDS
+
+    try:
+        with get_pooled_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT status, executed_at FROM audit_log WHERE action_id = %s;",
+                    (action_id,),
+                )
+                row = cur.fetchone()
+                assert row is not None
+                assert row[0] == "rejected"
+                assert row[1] is None
+
+                cur.execute("SELECT count(*) FROM tickets WHERE action_id = %s;", (action_id,))
+                ticket_count = cur.fetchone()[0]
+                assert ticket_count == 0, "No ticket should be created for rejected action"
+
+        # Attempt to pass rejected proposal to execute_action -> must remain rejected with no side-effects
+        exec_result = nodes.execute_action(AgentState(action_proposal=proposal))
+        assert exec_result["action_proposal"].status == ActionStatus.REJECTED
+        assert action_id not in nodes.EXECUTED_ACTION_IDS
+
+    finally:
+        with get_pooled_connection() as conn:
+            with conn.transaction():
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM audit_log WHERE action_id = %s;", (action_id,))
+
+
+def test_llm_thinking_offline_mode_fallback(monkeypatch):
+    """Verify that when offline mode is enabled, get_llm returns None and respond works deterministically."""
+    monkeypatch.setenv("OFFLINE_MODE", "true")
+    assert nodes.get_llm() is None
+
+    state = AgentState(
+        action_proposal=ActionProposal(
+            action_id="test-action-1",
+            action_type=ActionType.LINK_OUTAGE,
+            status=ActionStatus.APPROVED,
+            rationale="Active outage on Identity Provider (SSO)",
+        ),
+        policy_result=PolicyResult(
+            doc_id="POL-001",
+            effective_date="2026-09-01",
+            source="POL-001_v2.0.md",
+            text="Password Reset Policy",
+        ),
+    )
+    result = nodes.respond(state)
+    assert "Action: link_outage [approved]" in result["final_response"]
+    assert "POL-001 (effective 2026-09-01)" in result["final_response"]
+    assert "thinking" not in result
+
+
+def test_llm_thinking_and_interpretation_integrated(monkeypatch):
+    """Verify that LLM thinking and explanation are synthesized into final_response and state.thinking."""
+    llm = FakeLLM({
+        ResponseInterpretation: ResponseInterpretation(
+            thinking="Active outage on SSO explains the VPN connectivity failure, inhibiting credential reset.",
+            explanation="We identified that your VPN issue is due to the ongoing SSO outage. Your ticket is linked to the outage.",
+        ),
+    })
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+
+    state = AgentState(
+        messages=[{"role": "user", "content": "I cannot connect to VPN"}],
+        extracted_fields=ExtractedFields(
+            employee="Maria Papadopoulou",
+            application="Corporate VPN",
+            symptom="cannot connect to VPN",
+            office="Athens",
+            device="MacBook Pro",
+        ),
+        action_proposal=ActionProposal(
+            action_id="test-action-2",
+            action_type=ActionType.LINK_OUTAGE,
+            status=ActionStatus.APPROVED,
+            rationale="Active outage on Identity Provider (SSO)",
+        ),
+        policy_result=PolicyResult(
+            doc_id="POL-001",
+            effective_date="2026-09-01",
+            source="POL-001_v2.0.md",
+            text="Password Reset Policy",
+        ),
+    )
+    result = nodes.respond(state)
+    assert result.get("thinking") == "Active outage on SSO explains the VPN connectivity failure, inhibiting credential reset."
+    assert "Action: link_outage [approved]" in result["final_response"]
+    assert "ongoing SSO outage" in result["final_response"]
+    assert "POL-001 (effective 2026-09-01)" in result["final_response"]
+
+
+class FakeLLM:
+    """Chat model stand-in: with_structured_output(schema) returns the given value, or raises it."""
+
+    def __init__(self, outputs):
+        self.outputs = outputs
+
+    def with_structured_output(self, schema):
+        out = self.outputs[schema]
+
+        def run(_prompt):
+            if isinstance(out, Exception):
+                raise out
+            return out
+
+        return RunnableLambda(run)
+
+
+def _extract(text, email=None):
+    state = AgentState(messages=[{"role": "user", "content": text}])
+    return nodes.extract_fields(state, {"configurable": {"user_email": email}})
+
+
+def test_llm_extraction_fills_fields_rules_miss(monkeypatch):
+    """The LLM maps paraphrases ("my Mac", "finance reports site") to known values the rules cannot match."""
+    llm = FakeLLM({
+        ExtractedFields: ExtractedFields(
+            employee="Maria Papadopoulou", application="Finance Portal", symptom="keeps logging me off",
+            urgency="medium", office="Athens", device="MacBook Pro",
+        ),
+    })
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    text = "I'm maria.papadopoulou@nimbus.com from the Athens office, on my Mac. The finance reports site keeps logging me off."
+    result = _extract(text)
+    fields = result["extracted_fields"]
+    assert fields.device == "MacBook Pro"
+    assert fields.application == "Finance Portal"
+    assert fields.urgency == "medium"
+    assert fields.symptom == text  # the rules found a symptom, so it is kept
+    assert result["needs_clarification"] is False
+
+
+def test_llm_extraction_never_keeps_unknown_values(monkeypatch):
+    """Values outside the directory and the known offices, devices and urgency levels are dropped: ask, don't guess."""
+    llm = FakeLLM({
+        ExtractedFields: ExtractedFields(
+            employee="John Smith", application="ERP System", symptom="export fails with error 500",
+            urgency="urgent", office="Paris", device="iPad",
+        ),
+    })
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    result = _extract("The ERP System report export fails with error 500")
+    fields = result["extracted_fields"]
+    assert (fields.employee, fields.office, fields.device, fields.urgency) == (None, None, None, None)
+    assert fields.application == "ERP System"
+    assert result["needs_clarification"] is True
+    assert set(fields.missing_fields()) == {"employee", "office", "device"}
+
+
+def test_llm_extraction_drops_symptom_not_in_user_text(monkeypatch):
+    llm = FakeLLM({ExtractedFields: ExtractedFields(symptom="VPN keeps disconnecting")})
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    result = _extract("I'm Employee 02, London office, Linux Workstation.")
+    assert result["extracted_fields"].symptom is None
+    assert "symptom" in result["extracted_fields"].missing_fields()
+
+
+def test_llm_extraction_failure_falls_back_to_rules(monkeypatch, caplog):
+    llm = FakeLLM({ExtractedFields: RuntimeError("model unavailable")})
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    text = "I'm maria.papadopoulou@nimbus.com. My ERP System password is locked out." + AT_DESK
+    with caplog.at_level("WARNING", logger="src.agent.nodes"):
+        result = _extract(text)
+    fields = result["extracted_fields"]
+    assert (fields.employee, fields.application, fields.office, fields.device) == (
+        "Maria Papadopoulou", "ERP System", "Athens", "MacBook Pro",
+    )
+    assert "LLM field extraction failed" in caplog.text
+
+
+def test_llm_interpretation_citing_another_policy_is_discarded(monkeypatch, caplog):
+    """The rules choose the action and the citation; LLM text that cites a different policy is dropped."""
+    llm = FakeLLM({
+        ResponseInterpretation: ResponseInterpretation(
+            thinking="POL-008 covers this.", explanation="Per POL-008 you must notify IT before travelling.",
+        ),
+    })
+    monkeypatch.setattr(nodes, "get_llm", lambda: llm)
+    state = AgentState(
+        messages=[{"role": "user", "content": "My ERP System password is locked out."}],
+        action_proposal=ActionProposal(
+            action_id="test-action-3", action_type=ActionType.RESET_CREDENTIALS, status=ActionStatus.PENDING,
+            rationale="Credential reset requested and no outage explains it",
+        ),
+        policy_result=PolicyResult(
+            doc_id="POL-001", effective_date="2026-09-01", source="POL-001_v2.0.md", text="Password Reset Policy",
+        ),
+    )
+    with caplog.at_level("WARNING", logger="src.agent.nodes"):
+        result = nodes.respond(state)
+    assert "thinking" not in result
+    assert "POL-008" not in result["final_response"]
+    assert "POL-001 (effective 2026-09-01)" in result["final_response"]
+    assert "discarding it" in caplog.text
+
+
+# ==============================================================================
+# Conversation Flow, Follow-Ups, Multi-Turn Isolation & Entity Extraction Fixes
+# ==============================================================================
+
+
+def test_policy_question_without_question_mark_routes_directly(graph):
+    """Policy questions without a trailing '?' must not ask for office/device/symptom."""
+    config = new_config(email=None)
+    result = start(graph, config, "What is the Wi-Fi policy for visitors coming to our London office")
+    assert pending(graph, config) is None
+    assert result["action_proposal"].action_type == ActionType.ANSWER_POLICY
+    assert not result["action_proposal"].requires_approval
+    assert result["policy_result"].doc_id == "POL-016"
+
+
+def test_post_action_followup_questions_use_existing_state(graph):
+    """After an action is processed, follow-up questions use existing state without re-asking triage fields."""
+    config = new_config(email=None)
+    start(
+        graph,
+        config,
+        "I'm maria.papadopoulou@nimbus.com. I can't connect to the VPN, can you reset my access?" + AT_DESK,
+    )
+    assert pending(graph, config) == "approval"
+    res1 = decide(graph, config, approved=True)
+    action_id = res1["action_proposal"].action_id
+    assert res1["action_proposal"].action_type == ActionType.LINK_OUTAGE
+    assert res1["action_proposal"].status == ActionStatus.EXECUTED
+
+    # Follow-up 1: Why didn't you reset the password?
+    f1 = start(graph, config, "Why didn't you reset the password?")
+    assert pending(graph, config) is None
+    assert f1["action_proposal"].action_id == action_id
+    assert "Identity Provider (SSO)" in f1["final_response"]
+    assert "outage" in f1["final_response"].lower()
+
+    # Follow-up 2: Which other teams are affected by this outage?
+    f2 = start(graph, config, "Which other teams are affected by this outage?")
+    assert pending(graph, config) is None
+    assert f2["action_proposal"].action_id == action_id
+    assert "Finance" in f2["final_response"]
+    assert "Engineering" in f2["final_response"]
+
+    # Follow-up 3: Which policy did you base this on?
+    f3 = start(graph, config, "Which policy did you base this on?")
+    assert pending(graph, config) is None
+    assert f3["action_proposal"].action_id == action_id
+    assert "POL-001" in f3["final_response"]
+    assert "2026-09-01" in f3["final_response"]
+
+
+def test_multi_turn_new_request_isolates_incident_and_retains_user_context(graph):
+    """A new support issue in the same thread clears old application/symptom/action but keeps employee/office/device."""
+    config = new_config(email=None)
+    start(
+        graph,
+        config,
+        "I'm maria.papadopoulou@nimbus.com. I can't connect to the VPN, please reset my password." + AT_DESK,
+    )
+    res1 = decide(graph, config, approved=True)
+    first_action_id = res1["action_proposal"].action_id
+    assert res1["action_proposal"].action_type == ActionType.LINK_OUTAGE
+
+    # Second turn: new support issue on ERP System without re-stating name, office, or device
+    res2 = start(graph, config, "Now my ERP System report export fails with error 500.")
+    assert pending(graph, config) == "approval"
+    fields2 = res2["extracted_fields"]
+    assert fields2.employee == "Maria Papadopoulou"
+    assert fields2.office == "Athens"
+    assert fields2.device == "MacBook Pro"
+    assert fields2.application == "ERP System"
+    assert "VPN" not in (fields2.symptom or "")
+    assert res2["action_proposal"].action_id != first_action_id
+    assert res2["action_proposal"].action_type == ActionType.OPEN_TICKET
+
+
+def test_partial_device_and_unrecognized_directory_feedback(graph):
+    """Partial device names ('MacBook') match canonical devices, and unknown employee names get directory feedback."""
+    assert nodes.find_device("I am on my MacBook in Athens") == "MacBook Pro"
+    assert nodes.find_device("Using a Windows machine") == "Windows Laptop"
+    assert nodes.find_device("On Linux in London") == "Linux Workstation"
+
+    config = new_config(email=None)
+    res = start(graph, config, "I am John Smith in Athens on my MacBook, ERP System shows error 500.")
+    assert pending(graph, config) == "clarification"
+    assert res["extracted_fields"].device == "MacBook Pro"
+    assert res["extracted_fields"].office == "Athens"
+    assert res["extracted_fields"].employee is None
+    assert "could not find 'John Smith' in the Nimbus Analytics employee directory" in res["clarification_question"]
+
+
+def test_respond_never_emits_double_periods():
+    """Verify respond cleans trailing punctuation on rationale and never outputs '..'."""
+    state = AgentState(
+        action_proposal=ActionProposal(
+            action_id="act-clean-1",
+            action_type=ActionType.LINK_OUTAGE,
+            status=ActionStatus.EXECUTED,
+            rationale="Active outage on Identity Provider (SSO). Credential reset is inhibited.",
+        ),
+        policy_result=PolicyResult(
+            doc_id="POL-001",
+            effective_date="2026-09-01",
+            source="POL-001_password_reset_v2.md",
+            text="Policy text",
+        ),
+    )
+    out = nodes.respond(state)
+    assert ".." not in out["final_response"]

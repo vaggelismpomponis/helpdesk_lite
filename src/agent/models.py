@@ -18,6 +18,7 @@ __all__ = [
     "ExtractedFields",
     "GraphResult",
     "PolicyResult",
+    "ResponseInterpretation",
     "STATE_CHANGING_ACTIONS",
 ]
 
@@ -30,7 +31,12 @@ class ActionType(str, Enum):
     ESCALATE = "escalate"
 
 
-STATE_CHANGING_ACTIONS = {ActionType.RESET_CREDENTIALS, ActionType.OPEN_TICKET, ActionType.ESCALATE}
+STATE_CHANGING_ACTIONS = {
+    ActionType.LINK_OUTAGE,
+    ActionType.RESET_CREDENTIALS,
+    ActionType.OPEN_TICKET,
+    ActionType.ESCALATE,
+}
 
 
 class ActionStatus(str, Enum):
@@ -76,6 +82,13 @@ class ActionProposal(BaseModel):
     rationale: str = Field(default="", description="Reasoning for action selection")
 
 
+class ResponseInterpretation(BaseModel):
+    """Structured LLM output used by the respond node."""
+
+    thinking: str = Field(description="2-3 sentences of reasoning linking the symptom, outages and policy rules")
+    explanation: str = Field(description="Explanation for the user of what was found and why this action was chosen")
+
+
 class AgentState(BaseModel):
     thread_id: str = Field(default="", description="Unique session ID linked 1:1 with Chainlit session")
     messages: List[Dict[str, Any]] = Field(default_factory=list, description="Conversation history messages")
@@ -86,3 +99,4 @@ class AgentState(BaseModel):
     graph_result: Optional[GraphResult] = Field(default=None, description="Dependency and outage status")
     action_proposal: Optional[ActionProposal] = Field(default=None, description="Proposed action & status")
     final_response: Optional[str] = Field(default=None, description="Final assistant message with citations")
+    thinking: Optional[str] = Field(default=None, description="LLM reasoning and interpretation of results")

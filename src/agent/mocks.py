@@ -1,6 +1,7 @@
-"""Mock tools for the graph skeleton. Same signatures as the real Knowledge tools (contract section 4).
+"""DECOMMISSIONED: Mock tools for the graph skeleton (Step 8 / Issue #28).
 
-They read src/data instead of pgvector and Neo4j, and are replaced by the real tools in step 8.
+Replaced by real Knowledge implementations in `src/knowledge/tools.py` wired into `src/agent/nodes.py`.
+Retained for backwards compatibility with any standalone mock scripts.
 """
 
 import json

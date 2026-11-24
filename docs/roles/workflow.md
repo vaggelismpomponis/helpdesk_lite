@@ -39,11 +39,11 @@
 - [x] Interrupt για clarification
 - [x] Interrupt για approval
 - [x] PostgresSaver συνδεδεμένο
-- [ ] Mocks αντικαταστάθηκαν με πραγματικά tools
+- [x] Mocks αντικαταστάθηκαν με πραγματικά tools
 - [x] Outage → *link to outage*
 - [x] Idempotent `execute_action` (`action_id` + status)
 - [x] Restart test χωρίς διπλή εκτέλεση
-- [ ] Tracing metadata στο LangSmith
+- [x] Tracing metadata στο LangSmith
 - [ ] Έχω commits και τουλάχιστον ένα review σε PR άλλου ρόλου
 - [ ] Μπορώ να εξηγήσω ολόκληρη τη ροή
 
